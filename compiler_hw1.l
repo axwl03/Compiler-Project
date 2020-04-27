@@ -36,7 +36,7 @@ cppComment \/\/[^\n]*
 			}
 <cComment>([^*\n]|([*]+[^*\/\n]))*	ECHO;
 <cComment>([^*\n]|([*]+[^*\/\n]))*"*\/"	{ 
-				printf("%-8s \t %s\n", yytext, "C Comment"); 
+				printf("%s       \t %s\n", yytext, "C Comment");
 				if(commentFlag == 0){
 					++comment_num; 
 					commentFlag = 1;
