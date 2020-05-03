@@ -66,7 +66,7 @@
 %%
 
 Program
-    : StatementList { printf("StatementList\n"); }
+    : StatementList
 ;
 
 Type
@@ -78,11 +78,11 @@ TypeName
 ;
 
 ArrayType
-	: "[" Expression "]" Type
+	: '[' Expression ']' Type
 ;
 
 Expression
-	: UnaryExpr { printf("UnaryExpr\n"); } | Expression binary_op Expression { printf("binaryExpr\n"); }
+	: UnaryExpr | Expression binary_op Expression
 ;
 
 UnaryExpr
@@ -90,23 +90,23 @@ UnaryExpr
 ;
 
 binary_op
-	: "||" | "&&" | cmp_op | add_op | mul_op
+	: LOR | LAND | cmp_op | add_op | mul_op
 ;
 	
 cmp_op
-	: "==" | "!=" | "<" | "<=" | ">" | ">="
+	: EQL | NEQ | '<' | LEQ | '>' | GEQ
 ;
 
 add_op
-	: "+" | "-"
+	: '+' { printf("ADD\n"); } | '-' { printf("SUB\n"); }
 ;
 
 mul_op
-	: "*" | "/" | "%"
+	: '*' { printf("MUL\n"); } | '/' { printf("QUO\n"); } | '%' { printf("REM\n"); }
 ;
 
 unary_op
-	: "+" | "-" | "!"
+	: '+' | '-' | '!'
 ;
 
 PrimaryExpr
@@ -114,7 +114,7 @@ PrimaryExpr
 ;
 
 Operand
-	: Literal | IDENT { printf("IDENT\n"); } | "(" Expression ")"
+	: Literal | IDENT { printf("IDENT\n"); } | '(' Expression ')'
 ;
 
 Literal
@@ -122,16 +122,16 @@ Literal
 ;
 
 IndexExpr
-	: PrimaryExpr "[" Expression "]"
+	: PrimaryExpr '[' Expression ']'
 ;
 
 ConversionExpr
-	: Type "(" Expression ")"
+	: Type '(' Expression ')'
 ;
 
 Statement
 	: DeclarationStmt NEWLINE { printf("DeclarationStmt\n"); }
-	| SimpleStmt NEWLINE { printf("SimpleStmt\n"); }
+	| SimpleStmt NEWLINE
 	| Block NEWLINE { printf("Block\n"); }
 	| IfStmt NEWLINE { printf("IfStmt\n"); }
 	| ForStmt NEWLINE { printf("ForStmt\n"); }
@@ -145,7 +145,7 @@ SimpleStmt
 
 DeclarationStmt
 	: VAR IDENT Type
-	| VAR IDENT Type "=" Expression
+	| VAR IDENT Type '=' Expression
 ;
 
 AssignmentStmt
@@ -153,7 +153,7 @@ AssignmentStmt
 ;
 
 assign_op
-	: "=" | "+=" | "-=" | "*=" | "/=" | "%="
+	: '=' | ADD_ASSIGN | SUB_ASSIGN | MUL_ASSIGN | QUO_ASSIGN | REM_ASSIGN
 ;
 
 ExpressionStmt
@@ -161,12 +161,12 @@ ExpressionStmt
 ;
 
 IncDecStmt
-	: Expression INC
-	| Expression DEC
+	: Expression INC { printf("INC\n"); }
+	| Expression DEC { printf("DEC\n"); }
 ;
 
 Block
-	: "{" StatementList "}"
+	: '{' StatementList '}'
 ;
 
 StatementList
@@ -190,7 +190,7 @@ ForStmt
 ;
 
 ForClause
-	: InitStmt ";" Condition ";" PostStmt
+	: InitStmt ';' Condition ';' PostStmt
 ;
 
 InitStmt
@@ -202,8 +202,8 @@ PostStmt
 ;
 
 PrintStmt
-	: PRINT "(" Expression ")"
-	| PRINTLN "(" Expression ")"
+	: PRINT '(' Expression ')'
+	| PRINTLN '(' Expression ')'
 ;
 
 %%
