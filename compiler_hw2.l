@@ -91,8 +91,12 @@ fnumber ({digit}*\.{digit}+)
 "bool"      { yylval.type = "bool";
 				return BOOL; 
 			}
-"true"      {;}
-"false"     {;}
+"true"      { yylval.b_val = true; 
+				return BOOL_LIT; 
+			}
+"false"     { yylval.b_val = false;
+				return BOOL_LIT; 
+			}
 "var"       { return VAR; }
 
 {inumber}   { yylval.i_val = atoi(yytext);

@@ -33,6 +33,7 @@
     int i_val;
     float f_val;
     char *s_val;
+	bool b_val;
 	char *type;
 	char *id;
 }
@@ -53,6 +54,7 @@
 %token <i_val> INT_LIT
 %token <f_val> FLOAT_LIT
 %token <s_val> STRING_LIT
+%token <b_val> BOOL_LIT
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
@@ -67,19 +69,6 @@ Program
     : StatementList { printf("StatementList\n"); }
 ;
 
-StatementList
-    : StatementList Statement
-    | Statement
-;
-
-Statement
-	: DeclarationStmt { printf("DeclarationStmt\n"); }
-;
-
-DeclarationStmt
-	: VAR IDENT Type NEWLINE { printf("var %s %s\n", $2, $3); }
-;
-
 Type
 	: TypeName | ArrayType
 ;
@@ -89,7 +78,132 @@ TypeName
 ;
 
 ArrayType
-	: '[' ']' Type
+	: "[" Expression "]" Type
+;
+
+Expression
+	: UnaryExpr { printf("UnaryExpr\n"); } | Expression binary_op Expression { printf("binaryExpr\n"); }
+;
+
+UnaryExpr
+	: PrimaryExpr | unary_op UnaryExpr
+;
+
+binary_op
+	: "||" | "&&" | cmp_op | add_op | mul_op
+;
+	
+cmp_op
+	: "==" | "!=" | "<" | "<=" | ">" | ">="
+;
+
+add_op
+	: "+" | "-"
+;
+
+mul_op
+	: "*" | "/" | "%"
+;
+
+unary_op
+	: "+" | "-" | "!"
+;
+
+PrimaryExpr
+	: Operand | IndexExpr | ConversionExpr
+;
+
+Operand
+	: Literal | IDENT { printf("IDENT\n"); } | "(" Expression ")"
+;
+
+Literal
+	: INT_LIT | FLOAT_LIT | BOOL_LIT | STRING_LIT
+;
+
+IndexExpr
+	: PrimaryExpr "[" Expression "]"
+;
+
+ConversionExpr
+	: Type "(" Expression ")"
+;
+
+Statement
+	: DeclarationStmt NEWLINE { printf("DeclarationStmt\n"); }
+	| SimpleStmt NEWLINE { printf("SimpleStmt\n"); }
+	| Block NEWLINE { printf("Block\n"); }
+	| IfStmt NEWLINE { printf("IfStmt\n"); }
+	| ForStmt NEWLINE { printf("ForStmt\n"); }
+	| PrintStmt NEWLINE { printf("PrintStmt\n"); }
+	| NEWLINE
+;
+
+SimpleStmt
+	: AssignmentStmt | ExpressionStmt | IncDecStmt
+;
+
+DeclarationStmt
+	: VAR IDENT Type
+	| VAR IDENT Type "=" Expression
+;
+
+AssignmentStmt
+	: Expression assign_op Expression
+;
+
+assign_op
+	: "=" | "+=" | "-=" | "*=" | "/=" | "%="
+;
+
+ExpressionStmt
+	: Expression
+;
+
+IncDecStmt
+	: Expression INC
+	| Expression DEC
+;
+
+Block
+	: "{" StatementList "}"
+;
+
+StatementList
+    : StatementList Statement
+    | Statement
+;
+
+IfStmt
+	: IF Condition Block
+	| IF Condition Block ELSE IfStmt
+	| IF Condition Block ELSE Block
+;
+
+Condition
+	: Expression
+;
+
+ForStmt
+	: FOR Condition Block
+	| FOR ForClause Block
+;
+
+ForClause
+	: InitStmt ";" Condition ";" PostStmt
+;
+
+InitStmt
+	: SimpleStmt
+;
+
+PostStmt
+	: SimpleStmt
+;
+
+PrintStmt
+	: PRINT "(" Expression ")"
+	| PRINTLN "(" Expression ")"
 ;
 
 %%
