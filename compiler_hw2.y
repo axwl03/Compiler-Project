@@ -19,8 +19,8 @@
 
     /* Symbol table function - you can add new function if needed. */
     static void create_symbol();
-    static void insert_symbol();
-    static void lookup_symbol();
+	static void insert_symbol(char *id, char *type, char *element_type);
+    static char *lookup_symbol(char *id);
     static void dump_symbol();
 %}
 
@@ -36,28 +36,36 @@
 	bool b_val;
 	char *type;
 	char *id;
+	char *output;
 }
 
 /* Token without return */
 %token VAR
 %token INT FLOAT BOOL STRING
-%token '+' '-' '*' '/' '%' INC DEC
-%token '>' '<' GEQ LEQ EQL NEQ
+%token INC DEC
 %token '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN QUO_ASSIGN REM_ASSIGN
-%token LAND LOR '!'
-%token '(' ')' '[' ']' '{' '}'
+%token '(' ')' '{' '}'
 %token ';' ',' NEWLINE
 %token PRINT PRINTLN IF ELSE FOR
-%token <id> IDENT
+
+%left LOR
+%left LAND
+%left '>' '<' GEQ LEQ EQL NEQ
+%left '+' '-'
+%left '*' '/' '%'
+%nonassoc POS NEG '!'
+%nonassoc '[' ']'
 
 /* Token with return, which need to sepcify type */
 %token <i_val> INT_LIT
 %token <f_val> FLOAT_LIT
 %token <s_val> STRING_LIT
 %token <b_val> BOOL_LIT
+%token <id> IDENT
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
+%type <output> Expression UnaryExpr PrimaryExpr Operand binary_op add_op cmp_op mul_op
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -82,43 +90,43 @@ ArrayType
 ;
 
 Expression
-	: UnaryExpr | Expression binary_op Expression
+	: UnaryExpr { $$ = $1; } | Expression binary_op Expression { printf("%s%s%s", $1, $3, $2); }
 ;
 
 UnaryExpr
-	: PrimaryExpr | unary_op UnaryExpr
+	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr
 ;
 
 binary_op
-	: LOR | LAND | cmp_op | add_op | mul_op
+	: LOR | LAND | cmp_op { $$ = $1; } | add_op { $$ = $1; } | mul_op { $$ = $1; }
 ;
 	
 cmp_op
-	: EQL | NEQ | '<' | LEQ | '>' | GEQ
+	: EQL { $$ = "EQL\n"; } | NEQ { $$ = "NEQ\n"; } | '<' { $$ = "\n"; } | LEQ { $$ = "LEQ\n"; } | '>' { $$ = "GTR\n"; } | GEQ { $$ = "GEQ\n"; }
 ;
 
 add_op
-	: '+' { printf("ADD\n"); } | '-' { printf("SUB\n"); }
+	: '+' { $$ = "ADD\n"; } | '-' { $$ = "SUB\n"; }
 ;
 
 mul_op
-	: '*' { printf("MUL\n"); } | '/' { printf("QUO\n"); } | '%' { printf("REM\n"); }
+	: '*' { $$ = "MUL\n"; } | '/' { $$ = "QUO\n"; } | '%' { $$ = "REM\n"; }
 ;
 
 unary_op
-	: '+' | '-' | '!'
+	: '+' %prec POS { printf("POS\n"); } | '-' %prec NEG { printf("NEG\n"); } | '!' { printf("NOT\n"); }
 ;
 
 PrimaryExpr
-	: Operand | IndexExpr | ConversionExpr
+	: Operand { $$ = $1; } | IndexExpr | ConversionExpr
 ;
 
 Operand
-	: Literal | IDENT { printf("IDENT\n"); } | '(' Expression ')'
+	: Literal | IDENT { $$ = lookup_symbol($1); } | '(' Expression ')'
 ;
 
 Literal
-	: INT_LIT | FLOAT_LIT | BOOL_LIT | STRING_LIT
+	: INT_LIT { printf("INT_LIT\n"); } | FLOAT_LIT { printf("FLOAT_LIT\n"); } | BOOL_LIT { printf("BOOL_LIT\n"); } | STRING_LIT { printf("STRING_LIT\n"); }
 ;
 
 IndexExpr
@@ -130,7 +138,7 @@ ConversionExpr
 ;
 
 Statement
-	: DeclarationStmt NEWLINE { printf("DeclarationStmt\n"); }
+	: DeclarationStmt NEWLINE
 	| SimpleStmt NEWLINE
 	| Block NEWLINE { printf("Block\n"); }
 	| IfStmt NEWLINE { printf("IfStmt\n"); }
@@ -144,7 +152,7 @@ SimpleStmt
 ;
 
 DeclarationStmt
-	: VAR IDENT Type
+	: VAR IDENT Type { insert_symbol($2, $3, NULL); }
 	| VAR IDENT Type '=' Expression
 ;
 
@@ -161,8 +169,8 @@ ExpressionStmt
 ;
 
 IncDecStmt
-	: Expression INC { printf("INC\n"); }
-	| Expression DEC { printf("DEC\n"); }
+	: Expression INC { printf("%sINC\n", $1); }
+	| Expression DEC { printf("%sDEC\n", $1); }
 ;
 
 Block
@@ -221,6 +229,7 @@ int main(int argc, char *argv[])
     yylineno = 0;
     yyparse();
 
+	dump_symbol();
 	printf("Total lines: %d\n", yylineno);
     fclose(yyin);
     return 0;
@@ -230,28 +239,55 @@ static void create_symbol() {
 	symbol_table[current_scope] = NULL;	
 }
 
-static void insert_symbol() {
+static void insert_symbol(char *id, char *type, char *element_type) {
 	entry *tail = symbol_table[current_scope], *ptr;
-	for(; tail != NULL; tail = tail->next);
 	ptr = malloc(sizeof(entry));
 	if(!ptr){
 		printf("malloc failed\n");
 		exit(1);
 	}
-	ptr->index = tail->index + 1;
-	strcpy(ptr->name, yylval.id);
-	ptr->address = tail->address + 1;
-	tail->next = ptr;
-    printf("> Insert {%s} into symbol table (scope level: %d)\n", yylval.id, 0);
+	if(tail == NULL){
+		ptr->index = 0;
+		ptr->address = 0;
+		symbol_table[current_scope] = ptr;
+	}
+	else{
+		while(tail->next != NULL) tail = tail->next;
+		ptr->index = tail->index + 1;
+		ptr->address = tail->address + 1;
+		tail->next = ptr;
+	}
+	strcpy(ptr->name, id);
+	strcpy(ptr->type, type);
+	ptr->lineno = yylineno;
+	if(element_type == NULL)
+		strcpy(ptr->element_type, "-");
+	ptr->next = NULL;
+    printf("> Insert {%s} into symbol table (scope level: %d)\n", id, 0);
 }
 
-static void lookup_symbol() {
+static char *lookup_symbol(char *id) {
+	char *str;
+	for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
+		if(strcmp(id, ptr->name) == 0){
+			str = malloc(100*sizeof(char));
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			sprintf(str, "IDENT (name=%s, address=%d)\n", ptr->name, ptr->address);
+			return str;
+		}
+	}
+	return NULL;
 }
 
 static void dump_symbol() {
     printf("> Dump symbol table (scope level: %d)\n", 0);
     printf("%-10s%-10s%-10s%-10s%-10s%s\n",
-           "Index", "Name", "Type", "Address", "Lineno", "Element type");
+           "Index", "Name", "Type", "Address", "Lineno", "Element type");	
+	for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
     printf("%-10d%-10s%-10s%-10d%-10d%s\n",
-            0, "name", "type", 0, 0, "element type");
+            ptr->index, ptr->name, ptr->type, ptr->address, ptr->lineno, ptr->element_type);
+	}
 }
