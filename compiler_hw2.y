@@ -25,6 +25,9 @@
 
 	/* dynamic string concatenation */
 	char *dynamic_strcat(int n, ...);
+
+	/* evaluate expression's return type */
+	int evaluate_type(int type1, int type2);
 	
 %}
 
@@ -40,7 +43,10 @@
 	bool b_val;
 	char *type;
 	char *id;
-	char *output;
+	struct {
+		char *msg;
+		int type;
+	} output;
 }
 
 /* Token without return */
@@ -95,27 +101,27 @@ ArrayType
 
 Expression
 	: UnaryExpr { $$ = $1; } 
-	| Expression LOR Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LOR\n")); }
-	| Expression LAND Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LAND\n")); }
-	| Expression EQL Expression { $$ = dynamic_strcat(3, $1, $3, strdup("EQL\n")); }
-	| Expression NEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("NEQ\n")); }
-	| Expression '<' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LSR\n")); }
-	| Expression LEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LEQ\n")); }
-	| Expression '>' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("GTR\n")); }
-	| Expression GEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("GEQ\n")); }
-	| Expression '+' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("ADD\n")); }
-	| Expression '-' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("SUB\n")); }
-	| Expression '*' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("MUL\n")); }
-	| Expression '/' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("QUO\n")); }
-	| Expression '%' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("REM\n")); }
+	| Expression LOR Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); $$.type = BOOL; }
+	| Expression LAND Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); $$.type = BOOL; }
+	| Expression EQL Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); $$.type = BOOL; }
+	| Expression NEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); $$.type = BOOL; }
+	| Expression '<' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSR\n")); $$.type = BOOL; }
+	| Expression LEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); $$.type = BOOL; }
+	| Expression '>' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); $$.type = BOOL; }
+	| Expression GEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); $$.type = BOOL; }
+	| Expression '+' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); }
+	| Expression '-' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); }
+	| Expression '*' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); }
+	| Expression '/' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); }
+	| Expression '%' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); }
 ;
 
 UnaryExpr
-	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$ = dynamic_strcat(2, $2, $1); }
+	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$.msg = dynamic_strcat(2, $2.msg, $1.msg); }
 ;
 
 unary_op
-	: '+' %prec POS { $$ = strdup("POS\n"); } | '-' %prec NEG { $$ = strdup("NEG\n"); } | '!' { $$ = strdup("NOT\n"); }
+	: '+' %prec POS { $$.msg = strdup("POS\n"); } | '-' %prec NEG { $$.msg = strdup("NEG\n"); } | '!' { $$.msg = strdup("NOT\n"); }
 ;
 
 PrimaryExpr
@@ -123,26 +129,26 @@ PrimaryExpr
 ;
 
 Operand
-	: Literal { $$ = $1; } | IDENT { $$ = lookup_symbol($1); if(!$$) printf("undefined variable\n"); } | '(' Expression ')' { $$ = $2; }
+	: Literal { $$ = $1; } | IDENT { $$.msg = lookup_symbol($1); if(!($$.msg)) printf("undefined variable\n"); } | '(' Expression ')' { $$ = $2; }
 ;
 
 Literal
 	: INT_LIT 
 		{	char num[50];
 			sprintf(num, "INT_LIT %d\n", $1);
-			$$ = strdup(num); 
+			$$.msg = strdup(num); 
 		} 
 	| FLOAT_LIT
 		{	char num[50];
 			sprintf(num, "FLOAT_LIT %.6f\n", $1);
-			$$ = strdup(num); 
+			$$.msg = strdup(num); 
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
-				$$ = strdup("TRUE\n");
-			else $$ = strdup("FALSE\n");
+				$$.msg = strdup("TRUE\n");
+			else $$.msg = strdup("FALSE\n");
 		} 
-	| STRING_LIT { $$ = strdup("STRING_LIT\n"); }
+	| STRING_LIT { $$.msg = strdup("STRING_LIT\n"); }
 ;
 
 IndexExpr
@@ -186,12 +192,12 @@ ExpressionStmt
 
 IncDecStmt
 	: Expression INC 
-		{	char *str = dynamic_strcat(2, $1, strdup("INC\n")); 
+		{	char *str = dynamic_strcat(2, $1.msg, strdup("INC\n")); 
 			printf("%s", str);
 			free(str);
 		}
 	| Expression DEC
-		{	char *str = dynamic_strcat(2, $1, strdup("DEC\n")); 
+		{	char *str = dynamic_strcat(2, $1.msg, strdup("DEC\n")); 
 			printf("%s", str);
 			free(str);
 		}
@@ -234,8 +240,38 @@ PostStmt
 ;
 
 PrintStmt
-	: PRINT '(' Expression ')' { printf("%sPRINT\n", $3); }
-	| PRINTLN '(' Expression ')' { printf("%sPRINTLN\n", $3); }
+	: PRINT '(' Expression ')' 
+		{	char *type;
+			switch($3.type)
+			{
+			case INT: type = "int32";
+				break;
+			case FLOAT: type = "float32";
+				break;
+			case BOOL: type = "bool";
+				break;
+			case STRING: type = "string";
+				break;
+			default: type = "error";
+			}
+			printf("%sPRINT %s\n", $3.msg, type); 
+		}
+	| PRINTLN '(' Expression ')'
+		{	char *type;
+			switch($3.type)
+			{
+			case INT: type = "int32";
+				break;
+			case FLOAT: type = "float32";
+				break;
+			case BOOL: type = "bool";
+				break;
+			case STRING: type = "string";
+				break;
+			default: type = "error";
+			}
+			printf("%sPRINTLN %s\n", $3.msg, type); 
+		}
 ;
 
 %%
@@ -349,4 +385,14 @@ char *dynamic_strcat(int n, ...){	// remaining argument should be char * type an
 	}
 	va_end(list);
 	return result;
+}
+
+int evaluate_type(int type1, int type2){
+	if(type1 == FLOAT || type2 == FLOAT)
+		return FLOAT;
+	else if(type1 == INT || type2 == INT)
+		return INT;
+	else if(type1 == BOOL || type2 == BOOL)
+		return BOOL;
+	else return 0;
 }
