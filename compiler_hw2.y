@@ -69,7 +69,7 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
-%type <output> Expression UnaryExpr PrimaryExpr Operand binary_op add_op cmp_op mul_op Literal unary_op
+%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -94,27 +94,24 @@ ArrayType
 ;
 
 Expression
-	: UnaryExpr { $$ = $1; } | Expression binary_op Expression { $$ = dynamic_strcat(3, $1, $3, $2); }
+	: UnaryExpr { $$ = $1; } 
+	| Expression LOR Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LOR\n")); }
+	| Expression LAND Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LAND\n")); }
+	| Expression EQL Expression { $$ = dynamic_strcat(3, $1, $3, strdup("EQL\n")); }
+	| Expression NEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("NEQ\n")); }
+	| Expression '<' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LSR\n")); }
+	| Expression LEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("LEQ\n")); }
+	| Expression '>' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("GTR\n")); }
+	| Expression GEQ Expression { $$ = dynamic_strcat(3, $1, $3, strdup("GEQ\n")); }
+	| Expression '+' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("ADD\n")); }
+	| Expression '-' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("SUB\n")); }
+	| Expression '*' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("MUL\n")); }
+	| Expression '/' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("QUO\n")); }
+	| Expression '%' Expression { $$ = dynamic_strcat(3, $1, $3, strdup("REM\n")); }
 ;
 
 UnaryExpr
 	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$ = dynamic_strcat(2, $2, $1); }
-;
-
-binary_op
-	: LOR { $$ = strdup("LOR\n"); } | LAND { $$ = strdup("LAND\n"); } | cmp_op { $$ = $1; } | add_op { $$ = $1; } | mul_op { $$ = $1; }
-;
-	
-cmp_op
-	: EQL { $$ = strdup("EQL\n"); } | NEQ { $$ = strdup("NEQ\n"); } | '<' { $$ = strdup("\n"); } | LEQ { $$ = strdup("LEQ\n"); } | '>' { $$ = strdup("GTR\n"); } | GEQ { $$ = strdup("GEQ\n"); } 
-;
-
-add_op
-	: '+' { $$ = strdup("ADD\n"); } | '-' { $$ = strdup("SUB\n"); }
-;
-
-mul_op
-	: '*' { $$ = strdup("MUL\n"); } | '/' { $$ = strdup("QUO\n"); } | '%' { $$ = strdup("REM\n"); }
 ;
 
 unary_op
@@ -130,7 +127,22 @@ Operand
 ;
 
 Literal
-	: INT_LIT { $$ = strdup("INT_LIT\n"); } | FLOAT_LIT { $$ = strdup("FLOAT_LIT\n"); } | BOOL_LIT { $$ = strdup("BOOL_LIT\n"); } | STRING_LIT { $$ = strdup("STRING_LIT\n"); }
+	: INT_LIT 
+		{	char num[50];
+			sprintf(num, "INT_LIT %d\n", $1);
+			$$ = strdup(num); 
+		} 
+	| FLOAT_LIT
+		{	char num[50];
+			sprintf(num, "FLOAT_LIT %.6f\n", $1);
+			$$ = strdup(num); 
+		} 
+	| BOOL_LIT 
+		{	if($1 == true)
+				$$ = strdup("TRUE\n");
+			else $$ = strdup("FALSE\n");
+		} 
+	| STRING_LIT { $$ = strdup("STRING_LIT\n"); }
 ;
 
 IndexExpr
@@ -337,15 +349,4 @@ char *dynamic_strcat(int n, ...){	// remaining argument should be char * type an
 	}
 	va_end(list);
 	return result;
-
-	/*char *result = malloc(sizeof(char)*(strlen(str1)+strlen(str2)+1));
-	if(!result){
-		printf("error malloc\n");
-		exit(1);
-	}
-	strcpy(result, str1);
-	strcat(result, str2);
-	free(str1);
-	free(str2);
-	return result;*/
 }

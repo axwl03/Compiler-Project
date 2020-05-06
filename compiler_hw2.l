@@ -83,10 +83,10 @@ fnumber ({digit}*\.{digit}+)
 "float32"   { return FLOAT; }
 "string"    { return STRING; }
 "bool"      { return BOOL; }
-"true"      { yylval.b_val = strdup(yytext); 
+"true"      { yylval.b_val = true; 
 				return BOOL_LIT; 
 			}
-"false"     { yylval.b_val = strdup(yytext);
+"false"     { yylval.b_val = false;
 				return BOOL_LIT; 
 			}
 "var"       { return VAR; }
