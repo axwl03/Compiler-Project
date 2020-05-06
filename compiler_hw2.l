@@ -79,22 +79,14 @@ fnumber ({digit}*\.{digit}+)
 "else"      { return ELSE; }
 "for"       { return FOR; }
 
-"int32"     { yylval.type = "int32";
-				return INT; 
-			}
-"float32"   { yylval.type = "float32";
-				return FLOAT;
-			}
-"string"    { yylval.type = "string";
-				return STRING; 
-			}
-"bool"      { yylval.type = "bool";
-				return BOOL; 
-			}
-"true"      { yylval.b_val = true; 
+"int32"     { return INT; }
+"float32"   { return FLOAT; }
+"string"    { return STRING; }
+"bool"      { return BOOL; }
+"true"      { yylval.b_val = strdup(yytext); 
 				return BOOL_LIT; 
 			}
-"false"     { yylval.b_val = false;
+"false"     { yylval.b_val = strdup(yytext);
 				return BOOL_LIT; 
 			}
 "var"       { return VAR; }

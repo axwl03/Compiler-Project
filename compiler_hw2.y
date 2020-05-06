@@ -22,6 +22,10 @@
 	static void insert_symbol(char *id, char *type, char *element_type);
     static char *lookup_symbol(char *id);
     static void dump_symbol();
+
+	/* dynamic string concatenation */
+	char *dynamic_strcat(int n, ...);
+	
 %}
 
 %error-verbose
@@ -65,7 +69,7 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
-%type <output> Expression UnaryExpr PrimaryExpr Operand binary_op add_op cmp_op mul_op
+%type <output> Expression UnaryExpr PrimaryExpr Operand binary_op add_op cmp_op mul_op Literal unary_op
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -78,11 +82,11 @@ Program
 ;
 
 Type
-	: TypeName | ArrayType
+	: TypeName { $$ = $1; } | ArrayType
 ;
 
 TypeName
-	: INT | FLOAT | BOOL | STRING
+	: INT { $$ = strdup("int32"); } | FLOAT { $$ = strdup("float32"); } | BOOL { $$ = strdup("bool"); } | STRING { $$ = strdup("string"); } 
 ;
 
 ArrayType
@@ -90,31 +94,31 @@ ArrayType
 ;
 
 Expression
-	: UnaryExpr { $$ = $1; } | Expression binary_op Expression { printf("%s%s%s", $1, $3, $2); }
+	: UnaryExpr { $$ = $1; } | Expression binary_op Expression { $$ = dynamic_strcat(3, $1, $3, $2); }
 ;
 
 UnaryExpr
-	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr
+	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$ = dynamic_strcat(2, $2, $1); }
 ;
 
 binary_op
-	: LOR | LAND | cmp_op { $$ = $1; } | add_op { $$ = $1; } | mul_op { $$ = $1; }
+	: LOR { $$ = strdup("LOR\n"); } | LAND { $$ = strdup("LAND\n"); } | cmp_op { $$ = $1; } | add_op { $$ = $1; } | mul_op { $$ = $1; }
 ;
 	
 cmp_op
-	: EQL { $$ = "EQL\n"; } | NEQ { $$ = "NEQ\n"; } | '<' { $$ = "\n"; } | LEQ { $$ = "LEQ\n"; } | '>' { $$ = "GTR\n"; } | GEQ { $$ = "GEQ\n"; }
+	: EQL { $$ = strdup("EQL\n"); } | NEQ { $$ = strdup("NEQ\n"); } | '<' { $$ = strdup("\n"); } | LEQ { $$ = strdup("LEQ\n"); } | '>' { $$ = strdup("GTR\n"); } | GEQ { $$ = strdup("GEQ\n"); } 
 ;
 
 add_op
-	: '+' { $$ = "ADD\n"; } | '-' { $$ = "SUB\n"; }
+	: '+' { $$ = strdup("ADD\n"); } | '-' { $$ = strdup("SUB\n"); }
 ;
 
 mul_op
-	: '*' { $$ = "MUL\n"; } | '/' { $$ = "QUO\n"; } | '%' { $$ = "REM\n"; }
+	: '*' { $$ = strdup("MUL\n"); } | '/' { $$ = strdup("QUO\n"); } | '%' { $$ = strdup("REM\n"); }
 ;
 
 unary_op
-	: '+' %prec POS { printf("POS\n"); } | '-' %prec NEG { printf("NEG\n"); } | '!' { printf("NOT\n"); }
+	: '+' %prec POS { $$ = strdup("POS\n"); } | '-' %prec NEG { $$ = strdup("NEG\n"); } | '!' { $$ = strdup("NOT\n"); }
 ;
 
 PrimaryExpr
@@ -122,11 +126,11 @@ PrimaryExpr
 ;
 
 Operand
-	: Literal | IDENT { $$ = lookup_symbol($1); } | '(' Expression ')'
+	: Literal { $$ = $1; } | IDENT { $$ = lookup_symbol($1); if(!$$) printf("undefined variable\n"); } | '(' Expression ')' { $$ = $2; }
 ;
 
 Literal
-	: INT_LIT { printf("INT_LIT\n"); } | FLOAT_LIT { printf("FLOAT_LIT\n"); } | BOOL_LIT { printf("BOOL_LIT\n"); } | STRING_LIT { printf("STRING_LIT\n"); }
+	: INT_LIT { $$ = strdup("INT_LIT\n"); } | FLOAT_LIT { $$ = strdup("FLOAT_LIT\n"); } | BOOL_LIT { $$ = strdup("BOOL_LIT\n"); } | STRING_LIT { $$ = strdup("STRING_LIT\n"); }
 ;
 
 IndexExpr
@@ -143,7 +147,7 @@ Statement
 	| Block NEWLINE { printf("Block\n"); }
 	| IfStmt NEWLINE { printf("IfStmt\n"); }
 	| ForStmt NEWLINE { printf("ForStmt\n"); }
-	| PrintStmt NEWLINE { printf("PrintStmt\n"); }
+	| PrintStmt NEWLINE
 	| NEWLINE
 ;
 
@@ -169,8 +173,16 @@ ExpressionStmt
 ;
 
 IncDecStmt
-	: Expression INC { printf("%sINC\n", $1); }
-	| Expression DEC { printf("%sDEC\n", $1); }
+	: Expression INC 
+		{	char *str = dynamic_strcat(2, $1, strdup("INC\n")); 
+			printf("%s", str);
+			free(str);
+		}
+	| Expression DEC
+		{	char *str = dynamic_strcat(2, $1, strdup("DEC\n")); 
+			printf("%s", str);
+			free(str);
+		}
 ;
 
 Block
@@ -210,8 +222,8 @@ PostStmt
 ;
 
 PrintStmt
-	: PRINT '(' Expression ')'
-	| PRINTLN '(' Expression ')'
+	: PRINT '(' Expression ')' { printf("%sPRINT\n", $3); }
+	| PRINTLN '(' Expression ')' { printf("%sPRINTLN\n", $3); }
 ;
 
 %%
@@ -290,4 +302,50 @@ static void dump_symbol() {
     printf("%-10d%-10s%-10s%-10d%-10d%s\n",
             ptr->index, ptr->name, ptr->type, ptr->address, ptr->lineno, ptr->element_type);
 	}
+}
+
+char *dynamic_strcat(int n, ...){	// remaining argument should be char * type and is dynamic allocated memory
+	if(n < 2){
+		printf("dynamic_strcat's arguments should be at least 2 strings\n");
+		exit(1);
+	}
+	va_list list;
+	int length = 0;
+	char *current, *result;
+
+	va_start(list, n);
+	for(int i = 0; i < n; ++i){
+		current = va_arg(list, char *);
+		length += strlen(current);
+	} length += 1;
+	va_end(list);
+
+	result = malloc(sizeof(char)*length);
+	if(!result){
+		printf("error malloc\n");
+		exit(1);
+	}
+
+	va_start(list, n);
+	current = va_arg(list, char *);
+	strcpy(result, current);
+	free(current);
+	for(int i = 1; i < n; ++i){
+		current = va_arg(list, char *);
+		strcat(result, current);
+		free(current);
+	}
+	va_end(list);
+	return result;
+
+	/*char *result = malloc(sizeof(char)*(strlen(str1)+strlen(str2)+1));
+	if(!result){
+		printf("error malloc\n");
+		exit(1);
+	}
+	strcpy(result, str1);
+	strcat(result, str2);
+	free(str1);
+	free(str2);
+	return result;*/
 }
