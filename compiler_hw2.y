@@ -30,6 +30,9 @@
 	/* evaluate expression's return type */
 	int evaluate_type(int type1, int type2);
 	
+	/* change type string into type int */
+	int type_atoi(char *type);
+
 %}
 
 %error-verbose
@@ -79,7 +82,7 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
-%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr assign_op
+%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -132,7 +135,7 @@ unary_op
 ;
 
 PrimaryExpr
-	: Operand { $$ = $1; } | IndexExpr { $$ = $1; } | ConversionExpr
+	: Operand { $$ = $1; } | IndexExpr { $$ = $1; } | ConversionExpr { $$ = $1; }
 ;
 
 Operand
@@ -149,14 +152,17 @@ Operand
 				}
 				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
 				$$.msg = str;
-				if(strcmp(variable->type, "int32") == 0 || strcmp(variable->element_type, "int32") == 0)
+				$$.type = type_atoi(variable->type);
+				if($$.type == -1)
+					$$.type = type_atoi(variable->element_type);
+				/*if(strcmp(variable->type, "int32") == 0 || strcmp(variable->element_type, "int32") == 0)
 					$$.type = INT;
 				else if(strcmp(variable->type, "float32") == 0 || strcmp(variable->element_type, "float32") == 0)
 					$$.type = FLOAT;
 				else if(strcmp(variable->type, "bool") == 0 || strcmp(variable->element_type, "bool") == 0)
 					$$.type = BOOL;
 				else if(strcmp(variable->type, "string") == 0 || strcmp(variable->element_type, "string") == 0)
-					$$.type = STRING;
+					$$.type = STRING;*/
 			}
 		} 
 	| '(' Expression ')' { $$ = $2; }
@@ -195,6 +201,21 @@ IndexExpr
 
 ConversionExpr
 	: Type '(' Expression ')'
+		{
+			char str[10], s, d;
+			int result = type_atoi($1.type);
+			if(result == INT)
+				d = 'I';
+			else if(result == FLOAT)
+				d = 'F';
+			if($3.type == INT)
+				s = 'I';
+			else if($3.type == FLOAT)
+				s = 'F';
+			sprintf(str, "%c to %c\n", s, d);
+			$$.type = result;
+			$$.msg = dynamic_strcat(2, $3.msg, strdup(str));
+		}
 ;
 
 Statement
@@ -440,3 +461,14 @@ int evaluate_type(int type1, int type2){
 	else return 0;
 }
 
+int type_atoi(char *type){
+	if(strcmp(type, "int32") == 0)
+		return INT;
+	else if(strcmp(type, "float32") == 0)
+		return FLOAT;
+	else if(strcmp(type, "bool") == 0)
+		return BOOL;
+	else if(strcmp(type, "string") == 0)
+		return STRING;
+	else return -1;
+}
