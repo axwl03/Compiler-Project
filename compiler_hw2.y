@@ -21,7 +21,7 @@
     /* Symbol table function - you can add new function if needed. */
     static void create_symbol();
 	static void insert_symbol(char *id, char *type, char *element_type);
-    static char *lookup_symbol(char *id);
+    static entry *lookup_symbol(char *id);
     static void dump_symbol();
 
 	/* dynamic string concatenation */
@@ -42,7 +42,10 @@
     float f_val;
     char *s_val;
 	bool b_val;
-	char *type;
+	struct {
+		char *type;
+		char *element_type;
+	} type;
 	char *id;
 	struct {
 		char *msg;
@@ -76,7 +79,7 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
-%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op
+%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr assign_op
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -89,15 +92,18 @@ Program
 ;
 
 Type
-	: TypeName { $$ = $1; } | ArrayType
+	: TypeName { $$ = $1; } | ArrayType { $$ = $1; }
 ;
 
 TypeName
-	: INT { $$ = strdup("int32"); } | FLOAT { $$ = strdup("float32"); } | BOOL { $$ = strdup("bool"); } | STRING { $$ = strdup("string"); } 
+	: INT { $$.type = strdup("int32"); $$.element_type = strdup("-"); } 
+	| FLOAT { $$.type = strdup("float32"); $$.element_type = strdup("-"); } 
+	| BOOL { $$.type = strdup("bool"); $$.element_type = strdup("-"); } 
+	| STRING { $$.type = strdup("string"); $$.element_type = strdup("-"); } 
 ;
 
 ArrayType
-	: '[' Expression ']' Type
+	: '[' Expression ']' Type { printf("%s", $2.msg); free($2.msg); $$.type = strdup("array"); $$.element_type = $4.type; }
 ;
 
 Expression
@@ -110,11 +116,11 @@ Expression
 	| Expression LEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); $$.type = BOOL; }
 	| Expression '>' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); $$.type = BOOL; }
 	| Expression GEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); $$.type = BOOL; }
-	| Expression '+' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); }
-	| Expression '-' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); }
-	| Expression '*' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); }
-	| Expression '/' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); }
-	| Expression '%' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); }
+	| Expression '+' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); $$.type = evaluate_type($1.type, $3.type); }
+	| Expression '-' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); $$.type = evaluate_type($1.type, $3.type); }
+	| Expression '*' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); $$.type = evaluate_type($1.type, $3.type); }
+	| Expression '/' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); $$.type = evaluate_type($1.type, $3.type); }
+	| Expression '%' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); $$.type = evaluate_type($1.type, $3.type); }
 ;
 
 UnaryExpr
@@ -126,11 +132,34 @@ unary_op
 ;
 
 PrimaryExpr
-	: Operand { $$ = $1; } | IndexExpr | ConversionExpr
+	: Operand { $$ = $1; } | IndexExpr { $$ = $1; } | ConversionExpr
 ;
 
 Operand
-	: Literal { $$ = $1; } | IDENT { $$.msg = lookup_symbol($1); if(!($$.msg)) printf("undefined variable\n"); } | '(' Expression ')' { $$ = $2; }
+	: Literal { $$ = $1; } 
+	| IDENT 
+		{
+			entry *variable = lookup_symbol($1);
+			if(!variable) printf("undefined variable\n");
+			else{
+				char *str = malloc(100*sizeof(char));
+				if(!str){
+					printf("malloc failed\n");
+					exit(1);
+				}
+				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
+				$$.msg = str;
+				if(strcmp(variable->type, "int32") == 0 || strcmp(variable->element_type, "int32") == 0)
+					$$.type = INT;
+				else if(strcmp(variable->type, "float32") == 0 || strcmp(variable->element_type, "float32") == 0)
+					$$.type = FLOAT;
+				else if(strcmp(variable->type, "bool") == 0 || strcmp(variable->element_type, "bool") == 0)
+					$$.type = BOOL;
+				else if(strcmp(variable->type, "string") == 0 || strcmp(variable->element_type, "string") == 0)
+					$$.type = STRING;
+			}
+		} 
+	| '(' Expression ')' { $$ = $2; }
 ;
 
 Literal
@@ -138,26 +167,30 @@ Literal
 		{	char num[50];
 			sprintf(num, "INT_LIT %d\n", $1);
 			$$.msg = strdup(num); 
+			$$.type = INT;
 		} 
 	| FLOAT_LIT
 		{	char num[50];
 			sprintf(num, "FLOAT_LIT %.6f\n", $1);
 			$$.msg = strdup(num);
+			$$.type = FLOAT;
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
 				$$.msg = strdup("TRUE\n");
 			else $$.msg = strdup("FALSE\n");
+			$$.type = BOOL;
 		} 
 	| '"' STRING_LIT '"'
 		{	char str[100];
 			sprintf(str, "STRING_LIT %s\n", $2);
 			$$.msg = strdup(str);
+			$$.type = STRING;
 		} 
 ;
 
 IndexExpr
-	: PrimaryExpr '[' Expression ']'
+	: PrimaryExpr '[' Expression ']' { $$.msg = dynamic_strcat(2, $1.msg, $3.msg); }
 ;
 
 ConversionExpr
@@ -179,20 +212,25 @@ SimpleStmt
 ;
 
 DeclarationStmt
-	: VAR IDENT Type { insert_symbol($2, $3, NULL); }
-	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, $3, NULL); }
+	: VAR IDENT Type { insert_symbol($2, $3.type, $3.element_type); }
+	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, $3.type, $3.element_type); }
 ;
 
 AssignmentStmt
-	: Expression assign_op Expression
+	: Expression assign_op Expression { printf("%s%s%s", $1.msg, $3.msg, $2.msg); free($1.msg); free($3.msg); free($2.msg); }
 ;
 
 assign_op
-	: '=' | ADD_ASSIGN | SUB_ASSIGN | MUL_ASSIGN | QUO_ASSIGN | REM_ASSIGN
+	: '=' {$$.msg = strdup("ASSIGN\n"); } 
+	| ADD_ASSIGN {$$.msg = strdup("ADD_ASSIGN\n"); } 
+	| SUB_ASSIGN {$$.msg = strdup("SUB_ASSIGN\n"); } 
+	| MUL_ASSIGN {$$.msg = strdup("MUL_ASSIGN\n"); } 
+	| QUO_ASSIGN {$$.msg = strdup("QUO_ASSIGN\n"); } 
+	| REM_ASSIGN {$$.msg = strdup("REM_ASSIGN\n"); } 
 ;
 
 ExpressionStmt
-	: Expression
+	: Expression { printf("%s", $1.msg); free($1.msg); }
 ;
 
 IncDecStmt
@@ -259,7 +297,8 @@ PrintStmt
 				break;
 			default: type = "error";
 			}
-			printf("%sPRINT %s\n", $3.msg, type); 
+			printf("%sPRINT %s\n", $3.msg, type);
+			free($3.msg);
 		}
 	| PRINTLN '(' Expression ')'
 		{	char *type;
@@ -275,7 +314,8 @@ PrintStmt
 				break;
 			default: type = "error";
 			}
-			printf("%sPRINTLN %s\n", $3.msg, type); 
+			printf("%sPRINTLN %s\n", $3.msg, type);
+			free($3.msg);
 		}
 ;
 
@@ -325,23 +365,17 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	strcpy(ptr->name, id);
 	strcpy(ptr->type, type);
 	ptr->lineno = yylineno;
-	if(element_type == NULL)
-		strcpy(ptr->element_type, "-");
+	strcpy(ptr->element_type, element_type);
 	ptr->next = NULL;
     printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 }
 
-static char *lookup_symbol(char *id) {
-	char *str;
-	for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
-		if(strcmp(id, ptr->name) == 0){
-			str = malloc(100*sizeof(char));
-			if(!str){
-				printf("malloc failed\n");
-				exit(1);
+static entry *lookup_symbol(char *id) {
+	for(int i = current_scope; i >= 0; --i){
+		for(entry *ptr = symbol_table[i]; ptr != NULL; ptr = ptr->next){
+			if(strcmp(id, ptr->name) == 0){
+				return ptr;
 			}
-			sprintf(str, "IDENT (name=%s, address=%d)\n", ptr->name, ptr->address);
-			return str;
 		}
 	}
 	return NULL;
@@ -405,3 +439,4 @@ int evaluate_type(int type1, int type2){
 		return BOOL;
 	else return 0;
 }
+
