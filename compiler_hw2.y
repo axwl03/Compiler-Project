@@ -16,6 +16,7 @@
 	/* Symbol table */
 	entry *symbol_table[100];
 	int current_scope = 0;
+	int current_address = -1;
 
     /* Symbol table function - you can add new function if needed. */
     static void create_symbol();
@@ -54,7 +55,7 @@
 %token INT FLOAT BOOL STRING
 %token INC DEC
 %token '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN QUO_ASSIGN REM_ASSIGN
-%token '(' ')' '{' '}'
+%token '(' ')' '{' '}' '"'
 %token ';' ',' NEWLINE
 %token PRINT PRINTLN IF ELSE FOR
 
@@ -141,14 +142,18 @@ Literal
 	| FLOAT_LIT
 		{	char num[50];
 			sprintf(num, "FLOAT_LIT %.6f\n", $1);
-			$$.msg = strdup(num); 
+			$$.msg = strdup(num);
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
 				$$.msg = strdup("TRUE\n");
 			else $$.msg = strdup("FALSE\n");
 		} 
-	| STRING_LIT { $$.msg = strdup("STRING_LIT\n"); }
+	| '"' STRING_LIT '"'
+		{	char str[100];
+			sprintf(str, "STRING_LIT %s\n", $2);
+			$$.msg = strdup(str);
+		} 
 ;
 
 IndexExpr
@@ -162,7 +167,7 @@ ConversionExpr
 Statement
 	: DeclarationStmt NEWLINE
 	| SimpleStmt NEWLINE
-	| Block NEWLINE { printf("Block\n"); }
+	| Block NEWLINE
 	| IfStmt NEWLINE { printf("IfStmt\n"); }
 	| ForStmt NEWLINE { printf("ForStmt\n"); }
 	| PrintStmt NEWLINE
@@ -175,7 +180,7 @@ SimpleStmt
 
 DeclarationStmt
 	: VAR IDENT Type { insert_symbol($2, $3, NULL); }
-	| VAR IDENT Type '=' Expression
+	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, $3, NULL); }
 ;
 
 AssignmentStmt
@@ -204,7 +209,7 @@ IncDecStmt
 ;
 
 Block
-	: '{' StatementList '}'
+	: '{' { current_scope++; create_symbol(); } StatementList '}' { dump_symbol(); current_scope--; }
 ;
 
 StatementList
@@ -308,13 +313,13 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	}
 	if(tail == NULL){
 		ptr->index = 0;
-		ptr->address = 0;
+		ptr->address = ++current_address;
 		symbol_table[current_scope] = ptr;
 	}
 	else{
 		while(tail->next != NULL) tail = tail->next;
 		ptr->index = tail->index + 1;
-		ptr->address = tail->address + 1;
+		ptr->address = ++current_address;
 		tail->next = ptr;
 	}
 	strcpy(ptr->name, id);
@@ -323,7 +328,7 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	if(element_type == NULL)
 		strcpy(ptr->element_type, "-");
 	ptr->next = NULL;
-    printf("> Insert {%s} into symbol table (scope level: %d)\n", id, 0);
+    printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 }
 
 static char *lookup_symbol(char *id) {
@@ -343,13 +348,17 @@ static char *lookup_symbol(char *id) {
 }
 
 static void dump_symbol() {
-    printf("> Dump symbol table (scope level: %d)\n", 0);
+    printf("> Dump symbol table (scope level: %d)\n", current_scope);
     printf("%-10s%-10s%-10s%-10s%-10s%s\n",
            "Index", "Name", "Type", "Address", "Lineno", "Element type");	
-	for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
-    printf("%-10d%-10s%-10s%-10d%-10d%s\n",
-            ptr->index, ptr->name, ptr->type, ptr->address, ptr->lineno, ptr->element_type);
+	entry *release, *ptr = symbol_table[current_scope];
+	while(ptr != NULL){
+	    printf("%-10d%-10s%-10s%-10d%-10d%s\n", ptr->index, ptr->name, ptr->type, ptr->address, ptr->lineno, ptr->element_type);
+		release = ptr;
+		ptr = ptr->next;
+		free(release);
 	}
+	symbol_table[current_scope] = NULL;
 }
 
 char *dynamic_strcat(int n, ...){	// remaining argument should be char * type and is dynamic allocated memory
