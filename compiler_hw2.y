@@ -404,7 +404,7 @@ AssignmentStmt
 	: Expression assign_op Expression 
 		{	int type = evaluate_type($1.exprType, $3.exprType);
 			if($1.exprType == -1){	// $1 undefined
-				printf("%s%s%s", $1.msg, $3.msg, $2.msg); 
+				printf("%s%s%s\n", $1.msg, $3.msg, $2.msg); 
 				free($1.msg);
 				free($3.msg);
 				free($2.msg);
@@ -414,7 +414,7 @@ AssignmentStmt
 				sprintf(str, "cannot assign to %s", type);
 				free(type);
 				error_str = yyerror(str);
-				printf("%s%s%s%s", $1.msg, $3.msg, error_str, $2.msg);
+				printf("%s%s%s%s\n", $1.msg, $3.msg, error_str, $2.msg);
 				free(error_str);
 				free($1.msg);
 				free($3.msg);
@@ -423,12 +423,12 @@ AssignmentStmt
 			else if(type == -1){	// type mismatched
 				char *msg, *error_str = type_mismatched($2.msg, $1.exprType, $3.exprType);
 				msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), $2.msg);
-				printf("%s", msg); 
+				printf("%s\n", msg); 
 				free(error_str);
 				free(msg);
 			}
 			else{
-				printf("%s%s%s", $1.msg, $3.msg, $2.msg); 
+				printf("%s%s%s\n", $1.msg, $3.msg, $2.msg); 
 				free($1.msg);
 				free($3.msg);
 				free($2.msg);
@@ -437,12 +437,12 @@ AssignmentStmt
 ;
 
 assign_op
-	: '=' { $$.msg = strdup("ASSIGN\n"); } 
-	| ADD_ASSIGN { $$.msg = strdup("ADD_ASSIGN\n"); } 
-	| SUB_ASSIGN { $$.msg = strdup("SUB_ASSIGN\n"); } 
-	| MUL_ASSIGN { $$.msg = strdup("MUL_ASSIGN\n"); } 
-	| QUO_ASSIGN { $$.msg = strdup("QUO_ASSIGN\n"); } 
-	| REM_ASSIGN { $$.msg = strdup("REM_ASSIGN\n"); } 
+	: '=' { $$.msg = strdup("ASSIGN"); } 
+	| ADD_ASSIGN { $$.msg = strdup("ADD_ASSIGN"); } 
+	| SUB_ASSIGN { $$.msg = strdup("SUB_ASSIGN"); } 
+	| MUL_ASSIGN { $$.msg = strdup("MUL_ASSIGN"); } 
+	| QUO_ASSIGN { $$.msg = strdup("QUO_ASSIGN"); } 
+	| REM_ASSIGN { $$.msg = strdup("REM_ASSIGN"); } 
 ;
 
 ExpressionStmt
