@@ -8,9 +8,15 @@
     extern int yylex();
     extern FILE *yyin;
 
-    void yyerror (char const *s)
+    char *yyerror (char const *s)
     {
-        printf("error:%d: %s\n", yylineno, s);
+		char *str = malloc(sizeof(char)*200);
+		if(!str){
+			printf("malloc failed\n");
+			exit(1);
+		}
+        sprintf(str, "error:%d: %s\n", yylineno, s);
+		return str;
     }
 
 	/* Symbol table */
@@ -36,6 +42,9 @@
 	/* change type value(int) to type string(string) */
 	char *type_toString(int type);
 
+	/* error function */
+	char *type_mismatched(char *op, int type1, int type2);
+	char *op_type_not_defined(char *op, int type);
 %}
 
 %error-verbose
@@ -56,6 +65,7 @@
 	struct {
 		char *msg;
 		int exprType;
+		bool isVar;
 	} output;
 }
 
@@ -115,61 +125,130 @@ ArrayType
 Expression
 	: UnaryExpr { $$ = $1; } 
 	| Expression LOR Expression 
-		{ 	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); 
-			$$.exprType = BOOL; 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType != BOOL){
+				int type;
+				if($1.exprType == FLOAT || $3.exprType == FLOAT)
+					type = FLOAT;
+				else if($1.exprType == INT || $3.exprType == INT)
+					type = INT;
+				else if($1.exprType == STRING || $3.exprType == STRING)
+					type = STRING;
+				char *error_str = op_type_not_defined("LOR", type);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("LOR\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); 
+			$$.isVar = false;
 		}
 	| Expression LAND Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); 
-			$$.exprType = BOOL; 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType != BOOL){
+				int type;
+				if($1.exprType == FLOAT || $3.exprType == FLOAT)
+					type = FLOAT;
+				else if($1.exprType == INT || $3.exprType == INT)
+					type = INT;
+				else if($1.exprType == STRING || $3.exprType == STRING)
+					type = STRING;
+				char *error_str = op_type_not_defined("LAND", type);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("LAND\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); 
+			$$.isVar = false;
 		}
 	| Expression EQL Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression NEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression '<' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSS\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression LEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression '>' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression GEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); 
 			$$.exprType = BOOL; 
+			$$.isVar = false;
 		}
 	| Expression '+' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); 
-			$$.exprType = evaluate_type($1.exprType, $3.exprType);
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType == -1){
+				char *error_str = type_mismatched("ADD", $1.exprType, $3.exprType);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("ADD\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); 
+			$$.isVar = false;
 		}
 	| Expression '-' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); 
-			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType == -1){
+				char *error_str = type_mismatched("SUB", $1.exprType, $3.exprType);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("SUB\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); 
+			$$.isVar = false;
 		}
 	| Expression '*' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); 
-			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType == -1){
+				char *error_str = type_mismatched("MUL", $1.exprType, $3.exprType);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("MUL\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); 
+			$$.isVar = false;
 		}
 	| Expression '/' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); 
-			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType == -1){
+				char *error_str = type_mismatched("QUO", $1.exprType, $3.exprType);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("QUO\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); 
+			$$.isVar = false;
 		}
 	| Expression '%' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); 
-			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
+		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
+			if($$.exprType != INT){
+				int type;
+				if($1.exprType == FLOAT || $3.exprType == FLOAT)
+					type = FLOAT;
+				else if($1.exprType == BOOL || $3.exprType == BOOL)
+					type = BOOL;
+				else if($1.exprType == STRING || $3.exprType == STRING)
+					type = STRING;
+				char *error_str = op_type_not_defined("REM", type);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("REM\n")); 
+				free(error_str);
+			}
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); 
+			$$.isVar = false;
 		}
 ;
 
 UnaryExpr
-	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$.msg = dynamic_strcat(2, $2.msg, $1.msg); }
+	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$.msg = dynamic_strcat(2, $2.msg, $1.msg); $$.exprType = $2.exprType; $$.isVar = false; }
 ;
 
 unary_op
@@ -185,7 +264,13 @@ Operand
 	| IDENT 
 		{
 			entry *variable = lookup_symbol($1);
-			if(!variable) printf("undefined variable\n");
+			if(!variable){
+				char str[200], *error_str;
+				sprintf(str, "undefined: %s", $1);
+				error_str = yyerror(str);
+				$$.msg = error_str;
+				$$.exprType = -1;
+			}
 			else{
 				char *str = malloc(100*sizeof(char));
 				if(!str){
@@ -198,6 +283,7 @@ Operand
 				if($$.exprType == -1)
 					$$.exprType = type_atoi(variable->element_type);
 			}
+			$$.isVar = true;
 		} 
 	| '(' Expression ')' { $$ = $2; }
 ;
@@ -208,29 +294,33 @@ Literal
 			sprintf(num, "INT_LIT %d\n", $1);
 			$$.msg = strdup(num); 
 			$$.exprType = INT;
+			$$.isVar = false;
 		} 
 	| FLOAT_LIT
 		{	char num[50];
 			sprintf(num, "FLOAT_LIT %.6f\n", $1);
 			$$.msg = strdup(num);
 			$$.exprType = FLOAT;
+			$$.isVar = false;
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
 				$$.msg = strdup("TRUE\n");
 			else $$.msg = strdup("FALSE\n");
 			$$.exprType = BOOL;
+			$$.isVar = false;
 		} 
 	| '"' STRING_LIT '"'
 		{	char str[100];
 			sprintf(str, "STRING_LIT %s\n", $2);
 			$$.msg = strdup(str);
 			$$.exprType = STRING;
+			$$.isVar = false;
 		} 
 ;
 
 IndexExpr
-	: PrimaryExpr '[' Expression ']' { $$.msg = dynamic_strcat(2, $1.msg, $3.msg); }
+	: PrimaryExpr '[' Expression ']' { $$.msg = dynamic_strcat(2, $1.msg, $3.msg); $$.exprType = $1.exprType; $$.isVar = $1.isVar; }
 ;
 
 ConversionExpr
@@ -248,6 +338,7 @@ ConversionExpr
 			sprintf(str, "%c to %c\n", s, d);
 			$$.exprType = $1.type;
 			$$.msg = dynamic_strcat(2, $3.msg, strdup(str));
+			$$.isVar = false;
 		}
 ;
 
@@ -266,21 +357,90 @@ SimpleStmt
 ;
 
 DeclarationStmt
-	: VAR IDENT Type { insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); }
-	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); }
+	: VAR IDENT Type 
+		{	entry *variable = NULL;
+			for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
+				if(strcmp($2, ptr->name) == 0){
+					variable = ptr;
+					break;
+				}
+			}
+			if(!variable)
+				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
+			else{
+				char str[200], *error_str;
+				sprintf(str, "%s redeclared in this block. previous declaration at line %d", $2, variable->lineno);
+				error_str = yyerror(str);
+				printf("%s", error_str);
+				free(error_str);
+			}
+		}
+	| VAR IDENT Type '=' Expression
+		{	entry *variable = NULL;
+			for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
+				if(strcmp($2, ptr->name) == 0){
+					variable = ptr;
+					break;
+				}
+			}
+			if(!variable){
+				printf("%s", $5.msg);
+				free($5.msg);
+				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
+			}
+			else{
+				char str[200], *error_str;
+				sprintf(str, "%s redeclared in this block. previous declaration at line %d", $2, variable->lineno);
+				error_str = yyerror(str);
+				printf("%s", error_str);
+				free(error_str);
+			}
+		}
 ;
 
 AssignmentStmt
-	: Expression assign_op Expression { printf("%s%s%s", $1.msg, $3.msg, $2.msg); free($1.msg); free($3.msg); free($2.msg); }
+	: Expression assign_op Expression 
+		{	int type = evaluate_type($1.exprType, $3.exprType);
+			if($1.exprType == -1){	// $1 undefined
+				printf("%s%s%s", $1.msg, $3.msg, $2.msg); 
+				free($1.msg);
+				free($3.msg);
+				free($2.msg);
+			}
+			else if($1.isVar != true){	// check if $1 is variable
+				char str[200], *type = type_toString($1.exprType), *error_str;
+				sprintf(str, "cannot assign to %s", type);
+				free(type);
+				error_str = yyerror(str);
+				printf("%s%s%s%s", $1.msg, $3.msg, error_str, $2.msg);
+				free(error_str);
+				free($1.msg);
+				free($3.msg);
+				free($2.msg);
+			}
+			else if(type == -1){	// type mismatched
+				char *msg, *error_str = type_mismatched($2.msg, $1.exprType, $3.exprType);
+				msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), $2.msg);
+				printf("%s", msg); 
+				free(error_str);
+				free(msg);
+			}
+			else{
+				printf("%s%s%s", $1.msg, $3.msg, $2.msg); 
+				free($1.msg);
+				free($3.msg);
+				free($2.msg);
+			}
+		}
 ;
 
 assign_op
-	: '=' {$$.msg = strdup("ASSIGN\n"); } 
-	| ADD_ASSIGN {$$.msg = strdup("ADD_ASSIGN\n"); } 
-	| SUB_ASSIGN {$$.msg = strdup("SUB_ASSIGN\n"); } 
-	| MUL_ASSIGN {$$.msg = strdup("MUL_ASSIGN\n"); } 
-	| QUO_ASSIGN {$$.msg = strdup("QUO_ASSIGN\n"); } 
-	| REM_ASSIGN {$$.msg = strdup("REM_ASSIGN\n"); } 
+	: '=' { $$.msg = strdup("ASSIGN\n"); } 
+	| ADD_ASSIGN { $$.msg = strdup("ADD_ASSIGN\n"); } 
+	| SUB_ASSIGN { $$.msg = strdup("SUB_ASSIGN\n"); } 
+	| MUL_ASSIGN { $$.msg = strdup("MUL_ASSIGN\n"); } 
+	| QUO_ASSIGN { $$.msg = strdup("QUO_ASSIGN\n"); } 
+	| REM_ASSIGN { $$.msg = strdup("REM_ASSIGN\n"); } 
 ;
 
 ExpressionStmt
@@ -310,13 +470,24 @@ StatementList
 ;
 
 IfStmt
-	: IF Condition Block 
+	: IF Condition Block
 	| IF Condition Block ELSE IfStmt
 	| IF Condition Block ELSE Block
 ;
 
 Condition
-	: Expression { printf("%s", $1.msg); free($1.msg); }
+	: Expression 
+		{	if($1.exprType != BOOL){
+				char str[200], *type = type_toString($1.exprType), *error_str;
+				sprintf(str, "non-bool (type %s) used as for condition", type);
+				error_str = yyerror(str);
+				printf("%s%s", $1.msg, error_str);
+				free(error_str);
+				free(type);
+			}
+			else printf("%s", $1.msg); 
+			free($1.msg); 
+		}
 ;
 
 ForStmt
@@ -325,15 +496,7 @@ ForStmt
 ;
 
 ForClause
-	: InitStmt ';' Condition ';' PostStmt
-;
-
-InitStmt
-	: SimpleStmt
-;
-
-PostStmt
-	: SimpleStmt
+	: SimpleStmt ';' Condition ';' SimpleStmt
 ;
 
 PrintStmt
@@ -475,6 +638,8 @@ int evaluate_type(int type1, int type2){
 		return INT;
 	else if(type1 == BOOL && type2 == BOOL)
 		return BOOL;
+	else if(type1 == STRING && type2 == STRING)
+		return STRING;
 	else return -1;
 }
 
@@ -504,4 +669,27 @@ char *type_toString(int type){
 	else if(type == -1)
 		return strdup("-");
 	else return NULL;
+}
+
+char *type_mismatched(char *op, int type1, int type2){
+	char *str = malloc(sizeof(char)*200), *s_type1 = type_toString(type1), *s_type2 = type_toString(type2);
+	if(!str){
+		printf("malloc failed\n");
+		exit(1);
+	}
+	sprintf(str, "invalid operation: %s (mismatched types %s and %s)", op, s_type1, s_type2);
+	free(s_type1);
+	free(s_type2);
+	return str;
+}
+
+char *op_type_not_defined(char *op, int type){
+	char *str = malloc(sizeof(char)*200), *s_type = type_toString(type);
+	if(!str){
+		printf("malloc failed\n");
+		exit(1);
+	}
+	sprintf(str, "invalid operation: (operator %s not defined on %s)", op, s_type);
+	free(s_type);
+	return str;
 }
