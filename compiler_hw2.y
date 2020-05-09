@@ -33,6 +33,9 @@
 	/* change type string into type int */
 	int type_atoi(char *type);
 
+	/* change type value(int) to type string(string) */
+	char *type_toString(int type);
+
 %}
 
 %error-verbose
@@ -46,19 +49,19 @@
     char *s_val;
 	bool b_val;
 	struct {
-		char *type;
-		char *element_type;
+		int type;
+		int element_type;
 	} type;
 	char *id;
 	struct {
 		char *msg;
-		int type;
+		int exprType;
 	} output;
 }
 
 /* Token without return */
 %token VAR
-%token INT FLOAT BOOL STRING
+%token INT FLOAT BOOL STRING ARRAY
 %token INC DEC
 %token '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN QUO_ASSIGN REM_ASSIGN
 %token '(' ')' '{' '}' '"'
@@ -99,69 +102,69 @@ Type
 ;
 
 TypeName
-	: INT { $$.type = strdup("int32"); $$.element_type = strdup("-"); } 
-	| FLOAT { $$.type = strdup("float32"); $$.element_type = strdup("-"); } 
-	| BOOL { $$.type = strdup("bool"); $$.element_type = strdup("-"); } 
-	| STRING { $$.type = strdup("string"); $$.element_type = strdup("-"); } 
+	: INT { $$.type = INT; $$.element_type = -1; } 
+	| FLOAT { $$.type = FLOAT; $$.element_type = -1; } 
+	| BOOL { $$.type = BOOL; $$.element_type = -1; } 
+	| STRING { $$.type = STRING; $$.element_type = -1; } 
 ;
 
 ArrayType
-	: '[' Expression ']' Type { printf("%s", $2.msg); free($2.msg); $$.type = strdup("array"); $$.element_type = $4.type; }
+	: '[' Expression ']' Type { printf("%s", $2.msg); free($2.msg); $$.type = ARRAY; $$.element_type = $4.type; }
 ;
 
 Expression
 	: UnaryExpr { $$ = $1; } 
 	| Expression LOR Expression 
 		{ 	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression LAND Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression EQL Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression NEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression '<' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSS\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression LEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression '>' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression GEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); 
-			$$.type = BOOL; 
+			$$.exprType = BOOL; 
 		}
 	| Expression '+' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); 
-			$$.type = evaluate_type($1.type, $3.type);
+			$$.exprType = evaluate_type($1.exprType, $3.exprType);
 		}
 	| Expression '-' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); 
-			$$.type = evaluate_type($1.type, $3.type); 
+			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
 		}
 	| Expression '*' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); 
-			$$.type = evaluate_type($1.type, $3.type); 
+			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
 		}
 	| Expression '/' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); 
-			$$.type = evaluate_type($1.type, $3.type); 
+			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
 		}
 	| Expression '%' Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); 
-			$$.type = evaluate_type($1.type, $3.type); 
+			$$.exprType = evaluate_type($1.exprType, $3.exprType); 
 		}
 ;
 
@@ -191,17 +194,9 @@ Operand
 				}
 				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
 				$$.msg = str;
-				$$.type = type_atoi(variable->type);
-				if($$.type == -1)
-					$$.type = type_atoi(variable->element_type);
-				/*if(strcmp(variable->type, "int32") == 0 || strcmp(variable->element_type, "int32") == 0)
-					$$.type = INT;
-				else if(strcmp(variable->type, "float32") == 0 || strcmp(variable->element_type, "float32") == 0)
-					$$.type = FLOAT;
-				else if(strcmp(variable->type, "bool") == 0 || strcmp(variable->element_type, "bool") == 0)
-					$$.type = BOOL;
-				else if(strcmp(variable->type, "string") == 0 || strcmp(variable->element_type, "string") == 0)
-					$$.type = STRING;*/
+				$$.exprType = type_atoi(variable->type);
+				if($$.exprType == -1)
+					$$.exprType = type_atoi(variable->element_type);
 			}
 		} 
 	| '(' Expression ')' { $$ = $2; }
@@ -212,25 +207,25 @@ Literal
 		{	char num[50];
 			sprintf(num, "INT_LIT %d\n", $1);
 			$$.msg = strdup(num); 
-			$$.type = INT;
+			$$.exprType = INT;
 		} 
 	| FLOAT_LIT
 		{	char num[50];
 			sprintf(num, "FLOAT_LIT %.6f\n", $1);
 			$$.msg = strdup(num);
-			$$.type = FLOAT;
+			$$.exprType = FLOAT;
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
 				$$.msg = strdup("TRUE\n");
 			else $$.msg = strdup("FALSE\n");
-			$$.type = BOOL;
+			$$.exprType = BOOL;
 		} 
 	| '"' STRING_LIT '"'
 		{	char str[100];
 			sprintf(str, "STRING_LIT %s\n", $2);
 			$$.msg = strdup(str);
-			$$.type = STRING;
+			$$.exprType = STRING;
 		} 
 ;
 
@@ -242,17 +237,16 @@ ConversionExpr
 	: Type '(' Expression ')'
 		{
 			char str[10], s, d;
-			int result = type_atoi($1.type);
-			if(result == INT)
+			if($1.type == INT)
 				d = 'I';
-			else if(result == FLOAT)
+			else if($1.type == FLOAT)
 				d = 'F';
-			if($3.type == INT)
+			if($3.exprType == INT)
 				s = 'I';
-			else if($3.type == FLOAT)
+			else if($3.exprType == FLOAT)
 				s = 'F';
 			sprintf(str, "%c to %c\n", s, d);
-			$$.type = result;
+			$$.exprType = $1.type;
 			$$.msg = dynamic_strcat(2, $3.msg, strdup(str));
 		}
 ;
@@ -272,8 +266,8 @@ SimpleStmt
 ;
 
 DeclarationStmt
-	: VAR IDENT Type { insert_symbol($2, $3.type, $3.element_type); }
-	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, $3.type, $3.element_type); }
+	: VAR IDENT Type { insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); }
+	| VAR IDENT Type '=' Expression { printf("%s", $5.msg); free($5.msg); insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); }
 ;
 
 AssignmentStmt
@@ -344,38 +338,16 @@ PostStmt
 
 PrintStmt
 	: PRINT '(' Expression ')' 
-		{	char *type;
-			switch($3.type)
-			{
-			case INT: type = "int32";
-				break;
-			case FLOAT: type = "float32";
-				break;
-			case BOOL: type = "bool";
-				break;
-			case STRING: type = "string";
-				break;
-			default: type = "error";
-			}
+		{	char *type = type_toString($3.exprType);
 			printf("%sPRINT %s\n", $3.msg, type);
 			free($3.msg);
+			free(type);
 		}
 	| PRINTLN '(' Expression ')'
-		{	char *type;
-			switch($3.type)
-			{
-			case INT: type = "int32";
-				break;
-			case FLOAT: type = "float32";
-				break;
-			case BOOL: type = "bool";
-				break;
-			case STRING: type = "string";
-				break;
-			default: type = "error";
-			}
+		{	char *type = type_toString($3.exprType);
 			printf("%sPRINTLN %s\n", $3.msg, type);
 			free($3.msg);
+			free(type);
 		}
 ;
 
@@ -404,6 +376,7 @@ static void create_symbol() {
 	symbol_table[current_scope] = NULL;	
 }
 
+/* type and element_type must be dynamic allocated memories */
 static void insert_symbol(char *id, char *type, char *element_type) {
 	entry *tail = symbol_table[current_scope], *ptr;
 	ptr = malloc(sizeof(entry));
@@ -428,8 +401,11 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	strcpy(ptr->element_type, element_type);
 	ptr->next = NULL;
     printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
+	free(type);
+	free(element_type);
 }
 
+/* check symbol table <= current_scope */
 static entry *lookup_symbol(char *id) {
 	for(int i = current_scope; i >= 0; --i){
 		for(entry *ptr = symbol_table[i]; ptr != NULL; ptr = ptr->next){
@@ -441,6 +417,7 @@ static entry *lookup_symbol(char *id) {
 	return NULL;
 }
 
+/* dump symbol and release memory for current_scope symbol table */
 static void dump_symbol() {
     printf("> Dump symbol table (scope level: %d)\n", current_scope);
     printf("%-10s%-10s%-10s%-10s%-10s%s\n",
@@ -455,7 +432,8 @@ static void dump_symbol() {
 	symbol_table[current_scope] = NULL;
 }
 
-char *dynamic_strcat(int n, ...){	// remaining argument should be char * type and is dynamic allocated memory
+/* remaining argument should be char * type and is dynamic allocated memory */
+char *dynamic_strcat(int n, ...){	
 	if(n < 2){
 		printf("dynamic_strcat's arguments should be at least 2 strings\n");
 		exit(1);
@@ -510,4 +488,20 @@ int type_atoi(char *type){
 	else if(strcmp(type, "string") == 0)
 		return STRING;
 	else return -1;
+}
+
+char *type_toString(int type){
+	if(type == INT)
+		return strdup("int32");
+	else if(type == FLOAT)
+		return strdup("float32");
+	else if(type == BOOL)
+		return strdup("bool");
+	else if(type == STRING)
+		return strdup("string");
+	else if(type == ARRAY)
+		return strdup("array");
+	else if(type == -1)
+		return strdup("-");
+	else return NULL;
 }
