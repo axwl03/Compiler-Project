@@ -267,7 +267,9 @@ Operand
 			if(!variable){
 				char str[200], *error_str;
 				sprintf(str, "undefined: %s", $1);
+				yylineno++;
 				error_str = yyerror(str);
+				yylineno--;
 				$$.msg = error_str;
 				$$.exprType = -1;
 			}
@@ -480,7 +482,9 @@ Condition
 		{	if($1.exprType != BOOL){
 				char str[200], *type = type_toString($1.exprType), *error_str;
 				sprintf(str, "non-bool (type %s) used as for condition", type);
+				yylineno++;
 				error_str = yyerror(str);
+				yylineno--;
 				printf("%s%s", $1.msg, error_str);
 				free(error_str);
 				free(type);
