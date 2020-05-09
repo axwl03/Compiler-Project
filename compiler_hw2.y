@@ -111,19 +111,58 @@ ArrayType
 
 Expression
 	: UnaryExpr { $$ = $1; } 
-	| Expression LOR Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); $$.type = BOOL; }
-	| Expression LAND Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); $$.type = BOOL; }
-	| Expression EQL Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); $$.type = BOOL; }
-	| Expression NEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); $$.type = BOOL; }
-	| Expression '<' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSR\n")); $$.type = BOOL; }
-	| Expression LEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); $$.type = BOOL; }
-	| Expression '>' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); $$.type = BOOL; }
-	| Expression GEQ Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); $$.type = BOOL; }
-	| Expression '+' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); $$.type = evaluate_type($1.type, $3.type); }
-	| Expression '-' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); $$.type = evaluate_type($1.type, $3.type); }
-	| Expression '*' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); $$.type = evaluate_type($1.type, $3.type); }
-	| Expression '/' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); $$.type = evaluate_type($1.type, $3.type); }
-	| Expression '%' Expression { $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); $$.type = evaluate_type($1.type, $3.type); }
+	| Expression LOR Expression 
+		{ 	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression LAND Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression EQL Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression NEQ Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression '<' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSS\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression LEQ Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression '>' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression GEQ Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); 
+			$$.type = BOOL; 
+		}
+	| Expression '+' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); 
+			$$.type = evaluate_type($1.type, $3.type);
+		}
+	| Expression '-' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); 
+			$$.type = evaluate_type($1.type, $3.type); 
+		}
+	| Expression '*' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); 
+			$$.type = evaluate_type($1.type, $3.type); 
+		}
+	| Expression '/' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); 
+			$$.type = evaluate_type($1.type, $3.type); 
+		}
+	| Expression '%' Expression 
+		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); 
+			$$.type = evaluate_type($1.type, $3.type); 
+		}
 ;
 
 UnaryExpr
@@ -222,8 +261,8 @@ Statement
 	: DeclarationStmt NEWLINE
 	| SimpleStmt NEWLINE
 	| Block NEWLINE
-	| IfStmt NEWLINE { printf("IfStmt\n"); }
-	| ForStmt NEWLINE { printf("ForStmt\n"); }
+	| IfStmt NEWLINE
+	| ForStmt NEWLINE
 	| PrintStmt NEWLINE
 	| NEWLINE
 ;
@@ -277,13 +316,13 @@ StatementList
 ;
 
 IfStmt
-	: IF Condition Block
+	: IF Condition Block 
 	| IF Condition Block ELSE IfStmt
 	| IF Condition Block ELSE Block
 ;
 
 Condition
-	: Expression
+	: Expression { printf("%s", $1.msg); free($1.msg); }
 ;
 
 ForStmt
@@ -452,13 +491,13 @@ char *dynamic_strcat(int n, ...){	// remaining argument should be char * type an
 }
 
 int evaluate_type(int type1, int type2){
-	if(type1 == FLOAT || type2 == FLOAT)
+	if(type1 == FLOAT && type2 == FLOAT)
 		return FLOAT;
-	else if(type1 == INT || type2 == INT)
+	else if(type1 == INT && type2 == INT)
 		return INT;
-	else if(type1 == BOOL || type2 == BOOL)
+	else if(type1 == BOOL && type2 == BOOL)
 		return BOOL;
-	else return 0;
+	else return -1;
 }
 
 int type_atoi(char *type){
