@@ -249,7 +249,12 @@ Expression
 ;
 
 UnaryExpr
-	: PrimaryExpr { $$ = $1; } | unary_op UnaryExpr { $$.msg = dynamic_strcat(2, $2.msg, $1.msg); $$.exprType = $2.exprType; $$.isVar = false; }
+	: PrimaryExpr { $$ = $1; } 
+	| unary_op UnaryExpr 
+		{	$$.msg = dynamic_strcat(2, $2.msg, $1.msg); 
+			$$.exprType = $2.exprType; 
+			$$.isVar = false; 
+		}
 ;
 
 unary_op
@@ -294,28 +299,28 @@ Operand
 Literal
 	: INT_LIT 
 		{	char num[50];
-			sprintf(num, "INT_LIT %d\n", $1);
+			sprintf(num, "ldc %d\n", $1);
 			$$.msg = strdup(num); 
 			$$.exprType = INT;
 			$$.isVar = false;
 		} 
 	| FLOAT_LIT
 		{	char num[50];
-			sprintf(num, "FLOAT_LIT %.6f\n", $1);
+			sprintf(num, "ldc %.6f\n", $1);
 			$$.msg = strdup(num);
 			$$.exprType = FLOAT;
 			$$.isVar = false;
 		} 
 	| BOOL_LIT 
 		{	if($1 == true)
-				$$.msg = strdup("TRUE\n");
-			else $$.msg = strdup("FALSE\n");
+				$$.msg = strdup("iconst_1\n");
+			else $$.msg = strdup("iconst_0\n");
 			$$.exprType = BOOL;
 			$$.isVar = false;
 		} 
 	| '"' STRING_LIT '"'
 		{	char str[100];
-			sprintf(str, "STRING_LIT %s\n", $2);
+			sprintf(str, "ldc \"%s\"\n", $2);
 			$$.msg = strdup(str);
 			$$.exprType = STRING;
 			$$.isVar = false;
