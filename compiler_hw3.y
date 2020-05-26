@@ -196,7 +196,12 @@ Expression
 				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("ADD\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ADD\n")); 
+			else{
+				if($$.exprType == INT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("iadd\n")); 
+				else if($$.exprType == FLOAT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("fadd\n")); 
+			}
 			$$.isVar = false;
 		}
 	| Expression '-' Expression 
@@ -206,7 +211,12 @@ Expression
 				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("SUB\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("SUB\n")); 
+			else{
+				if($$.exprType == INT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("isub\n")); 
+				else if($$.exprType == FLOAT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("fsub\n")); 
+			}
 			$$.isVar = false;
 		}
 	| Expression '*' Expression 
@@ -216,7 +226,12 @@ Expression
 				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("MUL\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("MUL\n")); 
+			else{
+				if($$.exprType == INT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("imul\n"));
+				else if($$.exprType == FLOAT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("fmul\n"));
+			}
 			$$.isVar = false;
 		}
 	| Expression '/' Expression 
@@ -226,12 +241,17 @@ Expression
 				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("QUO\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("QUO\n")); 
+			else{
+				if($$.exprType == INT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("idiv\n")); 
+				else if($$.exprType == FLOAT)
+					$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("fdiv\n")); 
+			}
 			$$.isVar = false;
 		}
 	| Expression '%' Expression 
 		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
-			if($$.exprType != INT){
+			if($$.exprType != INT){		// error
 				int type;
 				if($1.exprType == FLOAT || $3.exprType == FLOAT)
 					type = FLOAT;
@@ -243,7 +263,7 @@ Expression
 				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("REM\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("REM\n")); 
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("irem\n")); 
 			$$.isVar = false;
 		}
 ;
@@ -270,7 +290,7 @@ Operand
 	| IDENT 
 		{
 			entry *variable = lookup_symbol($1);
-			if(!variable){
+			if(!variable){	// variable undefine
 				char str[200], *error_str;
 				sprintf(str, "undefined: %s", $1);
 				yylineno++;
@@ -285,11 +305,16 @@ Operand
 					printf("malloc failed\n");
 					exit(1);
 				}
-				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
-				$$.msg = str;
 				$$.exprType = type_atoi(variable->type);
-				if($$.exprType == -1)
+				if($$.exprType == INT)
+					sprintf(str, "iload %d\n", variable->address);
+				else if($$.exprType == FLOAT)
+					sprintf(str, "fload %d\n", variable->address);
+				else if($$.exprType == STRING)
+					sprintf(str, "aload %d\n", variable->address);
+				else if($$.exprType == -1)	// ARRAY not handled yet
 					$$.exprType = type_atoi(variable->element_type);
+				$$.msg = str;
 			}
 			$$.isVar = true;
 		} 
@@ -367,14 +392,25 @@ SimpleStmt
 DeclarationStmt
 	: VAR IDENT Type 
 		{	entry *variable = NULL;
+			// find if the variable is declared in current_scope			
 			for(entry *ptr = symbol_table[current_scope]; ptr != NULL; ptr = ptr->next){
 				if(strcmp($2, ptr->name) == 0){
 					variable = ptr;
 					break;
 				}
 			}
-			if(!variable)
+			// if not declared
+			if(!variable){
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
+				if($3.type == INT)
+					printf("ldc 0\nistore %d\n", current_address);
+				else if($3.type == FLOAT)
+					printf("ldc 0\nfstore %d\n", current_address);
+				else if($3.type == STRING)
+					printf("ldc \"\"\nastore %d\n", current_address);
+				else if($3.type == ARRAY)
+					printf("ARRAY not handled yet\n");
+			}
 			else{
 				char str[200], *error_str;
 				sprintf(str, "%s redeclared in this block. previous declaration at line %d", $2, variable->lineno);
@@ -394,7 +430,15 @@ DeclarationStmt
 			if(!variable){
 				printf("%s", $5.msg);
 				free($5.msg);
-				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
+				insert_symbol($2, type_toString($3.type), type_toString($3.element_type));
+				if($3.type == INT)
+					printf("istore %d\n", current_address);
+				else if($3.type == FLOAT)
+					printf("fstore %d\n", current_address);
+				else if($3.type == STRING)
+					printf("astore %d\n", current_address);
+				else if($3.type == ARRAY)
+					printf("ARRAY not handled yet\n");
 			}
 			else{
 				char str[200], *error_str;
@@ -457,19 +501,37 @@ ExpressionStmt
 
 IncDecStmt
 	: Expression INC 
-		{	char *str = dynamic_strcat(2, $1.msg, strdup("INC\n")); 
-			printf("%s", str);
-			free(str);
+		{	int address;
+			char type;
+			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
+				if(type == 'i')
+					printf("%sldc 1\niadd\nistore %d\n", $1.msg, address);
+				else if(type == 'f')
+					printf("%sldc 1.0\nfadd\nfstore %d\n", $1.msg, address);
+				free($1.msg);
+				/*char *str = dynamic_strcat(2, $1.msg, strdup("INC\n")); 
+				printf("%s", str);
+				free(str);*/
+			}
 		}
 	| Expression DEC
-		{	char *str = dynamic_strcat(2, $1.msg, strdup("DEC\n")); 
-			printf("%s", str);
-			free(str);
+		{	int address;
+			char type;
+			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
+				if(type == 'i')
+					printf("%sldc 1\nisub\nistore %d\n", $1.msg, address);
+				else if(type == 'f')
+					printf("%sldc 1.0\nfsub\nfstore %d\n", $1.msg, address);
+				free($1.msg);
+				/*char *str = dynamic_strcat(2, $1.msg, strdup("DEC\n")); 
+				printf("%s", str);
+				free(str);*/
+			}
 		}
 ;
 
 Block
-	: '{' { current_scope++; create_symbol(); } StatementList '}' { dump_symbol(); current_scope--; }
+	: '{' { current_scope++; create_symbol(); } StatementList '}' { /*dump_symbol();*/ current_scope--; }
 ;
 
 StatementList
@@ -511,16 +573,36 @@ ForClause
 
 PrintStmt
 	: PRINT '(' Expression ')' 
-		{	char *type = type_toString($3.exprType);
+		{	/*char *type = type_toString($3.exprType);
 			printf("%sPRINT %s\n", $3.msg, type);
 			free($3.msg);
-			free(type);
+			free(type);*/
+			printf("%s", $3.msg);
+			if($3.exprType == INT)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(I)V\n");
+			else if($3.exprType == FLOAT)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(F)V\n");
+			else if($3.exprType == STRING)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+			else if($3.exprType == BOOL)	// not handled yet
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+			free($3.msg);
 		}
 	| PRINTLN '(' Expression ')'
-		{	char *type = type_toString($3.exprType);
+		{	/*char *type = type_toString($3.exprType);
 			printf("%sPRINTLN %s\n", $3.msg, type);
 			free($3.msg);
-			free(type);
+			free(type);*/
+			printf("%s", $3.msg);
+			if($3.exprType == INT)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(I)V\n");
+			else if($3.exprType == FLOAT)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(F)V\n");
+			else if($3.exprType == STRING)
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+			else if($3.exprType == BOOL)	// not handled yet
+				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+			free($3.msg);
 		}
 ;
 
@@ -536,12 +618,15 @@ int main(int argc, char *argv[])
     }
 	symbol_table[0] = NULL;
 
+	printf(".source hw3.j\n.class public Main\n.super java/lang/Object\n.method public static main([Ljava/lang/String;)V\n.limit stack 100\n.limit locals 100\n");
+
     yylineno = 0;
     yyparse();
 
-	dump_symbol();
-	printf("Total lines: %d\n", yylineno);
+	//dump_symbol();
+	//printf("Total lines: %d\n", yylineno);
     fclose(yyin);
+	printf("return\n.end method\n");
     if (HAS_ERROR) {
         remove("hw3.j");
     }
@@ -576,7 +661,7 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	ptr->lineno = yylineno;
 	strcpy(ptr->element_type, element_type);
 	ptr->next = NULL;
-    printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
+    //printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 	free(type);
 	free(element_type);
 }
@@ -665,7 +750,7 @@ int type_atoi(char *type){
 		return BOOL;
 	else if(strcmp(type, "string") == 0)
 		return STRING;
-	else return -1;
+	else return -1;		// ARRAY
 }
 
 char *type_toString(int type){
