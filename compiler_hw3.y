@@ -30,6 +30,9 @@
     static entry *lookup_symbol(char *id);
     static void dump_symbol();
 
+	/* get variable by address */
+	entry *get_symbol(int address);
+
 	/* dynamic string concatenation */
 	char *dynamic_strcat(int n, ...);
 
@@ -41,6 +44,9 @@
 
 	/* change type value(int) to type string(string) */
 	char *type_toString(int type);
+
+	/* change IDENT... string to load or store instruction */
+	void ident_to_instruction(char *str, char instruction_type);
 
 	/* error function */
 	char *type_mismatched(char *op, int type1, int type2);
@@ -305,16 +311,11 @@ Operand
 					printf("malloc failed\n");
 					exit(1);
 				}
-				$$.exprType = type_atoi(variable->type);
-				if($$.exprType == INT)
-					sprintf(str, "iload %d\n", variable->address);
-				else if($$.exprType == FLOAT)
-					sprintf(str, "fload %d\n", variable->address);
-				else if($$.exprType == STRING)
-					sprintf(str, "aload %d\n", variable->address);
-				else if($$.exprType == -1)	// ARRAY not handled yet
-					$$.exprType = type_atoi(variable->element_type);
+				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
 				$$.msg = str;
+				$$.exprType = type_atoi(variable->type);
+				if($$.exprType == -1)
+					$$.exprType = type_atoi(variable->element_type);
 			}
 			$$.isVar = true;
 		} 
@@ -401,15 +402,17 @@ DeclarationStmt
 			}
 			// if not declared
 			if(!variable){
-				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
 				if($3.type == INT)
-					printf("ldc 0\nistore %d\n", current_address);
+					printf("ldc 0\n");
 				else if($3.type == FLOAT)
-					printf("ldc 0\nfstore %d\n", current_address);
+					printf("ldc 0\n");
 				else if($3.type == STRING)
-					printf("ldc \"\"\nastore %d\n", current_address);
+					printf("ldc \"\"\n");
+				else if($3.type == BOOL)		// not handled yet
+					printf("ldc \"\"\n");
 				else if($3.type == ARRAY)
 					printf("ARRAY not handled yet\n");
+				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
 			}
 			else{
 				char str[200], *error_str;
@@ -431,14 +434,6 @@ DeclarationStmt
 				printf("%s", $5.msg);
 				free($5.msg);
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type));
-				if($3.type == INT)
-					printf("istore %d\n", current_address);
-				else if($3.type == FLOAT)
-					printf("fstore %d\n", current_address);
-				else if($3.type == STRING)
-					printf("astore %d\n", current_address);
-				else if($3.type == ARRAY)
-					printf("ARRAY not handled yet\n");
 			}
 			else{
 				char str[200], *error_str;
@@ -459,7 +454,7 @@ AssignmentStmt
 				free($3.msg);
 				free($2.msg);
 			}
-			else if($1.isVar != true){	// check if $1 is variable
+			else if($1.isVar != true){	// $1 is not variable
 				char str[200], *type = type_toString($1.exprType), *error_str;
 				sprintf(str, "cannot assign to %s", type);
 				free(type);
@@ -501,7 +496,8 @@ ExpressionStmt
 
 IncDecStmt
 	: Expression INC 
-		{	int address;
+		{	ident_to_instruction($1.msg, 'l');
+			int address;
 			char type;
 			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
 				if(type == 'i')
@@ -515,7 +511,8 @@ IncDecStmt
 			}
 		}
 	| Expression DEC
-		{	int address;
+		{	ident_to_instruction($1.msg, 'l');
+			int address;
 			char type;
 			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
 				if(type == 'i')
@@ -531,7 +528,7 @@ IncDecStmt
 ;
 
 Block
-	: '{' { current_scope++; create_symbol(); } StatementList '}' { /*dump_symbol();*/ current_scope--; }
+	: '{' { current_scope++; create_symbol(); } StatementList '}' { dump_symbol(); current_scope--; }
 ;
 
 StatementList
@@ -577,6 +574,7 @@ PrintStmt
 			printf("%sPRINT %s\n", $3.msg, type);
 			free($3.msg);
 			free(type);*/
+			ident_to_instruction($3.msg, 'l');
 			printf("%s", $3.msg);
 			if($3.exprType == INT)
 				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(I)V\n");
@@ -593,6 +591,7 @@ PrintStmt
 			printf("%sPRINTLN %s\n", $3.msg, type);
 			free($3.msg);
 			free(type);*/
+			ident_to_instruction($3.msg, 'l');
 			printf("%s", $3.msg);
 			if($3.exprType == INT)
 				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(I)V\n");
@@ -623,8 +622,8 @@ int main(int argc, char *argv[])
     yylineno = 0;
     yyparse();
 
-	//dump_symbol();
-	//printf("Total lines: %d\n", yylineno);
+	dump_symbol();
+	printf("Total lines: %d\n", yylineno);
     fclose(yyin);
 	printf("return\n.end method\n");
     if (HAS_ERROR) {
@@ -661,7 +660,17 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	ptr->lineno = yylineno;
 	strcpy(ptr->element_type, element_type);
 	ptr->next = NULL;
-    //printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
+	if(strcmp(type, "int32") == 0)
+    	printf("istore %d\n", ptr->address);
+	else if(strcmp(type, "float32") == 0)
+    	printf("fstore %d\n", ptr->address);
+	else if(strcmp(type, "bool") == 0)
+    	printf("istore %d\n", ptr->address);	// not sure
+	else if(strcmp(type, "string") == 0)
+    	printf("astore %d\n", ptr->address);
+	else if(strcmp(type, "array") == 0)
+    	printf("not handle %d\n", ptr->address);
+	//printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 	free(type);
 	free(element_type);
 }
@@ -691,6 +700,18 @@ static void dump_symbol() {
 		free(release);
 	}
 	symbol_table[current_scope] = NULL;
+}
+
+entry *get_symbol(int address){
+	for(int i = current_scope; i >= 0; --i){
+		for(entry *ptr = symbol_table[i]; ptr != NULL; ptr = ptr->next){
+			if(ptr->address == address){
+				return ptr;
+			}
+		}
+	}
+	printf("variable with address %d not exist\n", address);
+	exit(1);
 }
 
 /* remaining argument should be char * type and is dynamic allocated memory */
@@ -767,6 +788,45 @@ char *type_toString(int type){
 	else if(type == -1)
 		return strdup("-");
 	else return NULL;
+}
+
+void ident_to_instruction(char *str, char instruction_type){
+	char *result = strstr(str, "IDENT"), *temp;
+	int len;
+	while(result != NULL){
+		char name[100];
+		int address;
+		sscanf(result, "IDENT (name=%[^,], address=%d)\n%n", name, &address, &len);
+		temp = result + len;	// point to the remaining string
+		temp = strdup(temp);
+		entry *ptr = get_symbol(address);
+		char *type = ptr->type;
+		if(instruction_type == 'l'){
+			if(strcmp(type, "int32") == 0)
+				sprintf(result, "%s %d\n%n%s", "iload", address, &len, temp);	// change IDENT... to instruction
+			else if(strcmp(type, "float32") == 0)
+				sprintf(result, "%s %d\n%n%s", "fload", address, &len, temp);
+			else if(strcmp(type, "bool") == 0)
+				sprintf(result, "%s %d\n%n%s", "iload", address, &len, temp);	// not sure
+			else if(strcmp(type, "string") == 0)
+				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);
+			// array not handled
+		}
+		else if(instruction_type == 's'){
+			if(strcmp(type, "int32") == 0)
+				sprintf(result, "%s %d\n%n%s", "istore", address, &len, temp);	// change IDENT... to instruction
+			else if(strcmp(type, "float32") == 0)
+				sprintf(result, "%s %d\n%n%s", "fstore", address, &len, temp);
+			else if(strcmp(type, "bool") == 0)
+				sprintf(result, "%s %d\n%n%s", "istore", address, &len, temp);	// not sure
+			else if(strcmp(type, "string") == 0)
+				sprintf(result, "%s %d\n%n%s", "astore", address, &len, temp);
+			// array not handled
+		}
+		free(temp);
+		result = result + len;
+		result = strstr(result, "IDENT");
+	}
 }
 
 char *type_mismatched(char *op, int type1, int type2){
