@@ -3,10 +3,11 @@
     #include "common.h" //Extern variables that communicate with lex
     // #define YYDEBUG 1
     // int yydebug = 1;
-
+	
     extern int yylineno;
     extern int yylex();
     extern FILE *yyin;
+	FILE *output;
 
     char *yyerror (char const *s)
     {
@@ -126,7 +127,7 @@ TypeName
 ;
 
 ArrayType
-	: '[' Expression ']' Type { printf("%s", $2.msg); free($2.msg); $$.type = ARRAY; $$.element_type = $4.type; }
+	: '[' Expression ']' Type { fprintf(output, "%s", $2.msg); free($2.msg); $$.type = ARRAY; $$.element_type = $4.type; }
 ;
 
 Expression
@@ -403,15 +404,15 @@ DeclarationStmt
 			// if not declared
 			if(!variable){
 				if($3.type == INT)
-					printf("ldc 0\n");
+					fprintf(output, "ldc 0\n");
 				else if($3.type == FLOAT)
-					printf("ldc 0\n");
+					fprintf(output, "ldc 0\n");
 				else if($3.type == STRING)
-					printf("ldc \"\"\n");
+					fprintf(output, "ldc \"\"\n");
 				else if($3.type == BOOL)		// not handled yet
-					printf("ldc \"\"\n");
+					fprintf(output, "ldc \"\"\n");
 				else if($3.type == ARRAY)
-					printf("ARRAY not handled yet\n");
+					fprintf(output, "ARRAY not handled yet\n");
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
 			}
 			else{
@@ -431,7 +432,7 @@ DeclarationStmt
 				}
 			}
 			if(!variable){
-				printf("%s", $5.msg);
+				fprintf(output, "%s", $5.msg);
 				free($5.msg);
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type));
 			}
@@ -473,7 +474,7 @@ AssignmentStmt
 				free(msg);
 			}
 			else{
-				printf("%s%s%s\n", $1.msg, $3.msg, $2.msg); 
+				fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
 				free($1.msg);
 				free($3.msg);
 				free($2.msg);
@@ -491,7 +492,7 @@ assign_op
 ;
 
 ExpressionStmt
-	: Expression { printf("%s", $1.msg); free($1.msg); }
+	: Expression { fprintf(output, "%s", $1.msg); free($1.msg); }
 ;
 
 IncDecStmt
@@ -501,9 +502,9 @@ IncDecStmt
 			char type;
 			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
 				if(type == 'i')
-					printf("%sldc 1\niadd\nistore %d\n", $1.msg, address);
+					fprintf(output, "%sldc 1\niadd\nistore %d\n", $1.msg, address);
 				else if(type == 'f')
-					printf("%sldc 1.0\nfadd\nfstore %d\n", $1.msg, address);
+					fprintf(output, "%sldc 1.0\nfadd\nfstore %d\n", $1.msg, address);
 				free($1.msg);
 				/*char *str = dynamic_strcat(2, $1.msg, strdup("INC\n")); 
 				printf("%s", str);
@@ -516,9 +517,9 @@ IncDecStmt
 			char type;
 			if(sscanf($1.msg, "%cload %d\n", &type, &address)){
 				if(type == 'i')
-					printf("%sldc 1\nisub\nistore %d\n", $1.msg, address);
+					fprintf(output, "%sldc 1\nisub\nistore %d\n", $1.msg, address);
 				else if(type == 'f')
-					printf("%sldc 1.0\nfsub\nfstore %d\n", $1.msg, address);
+					fprintf(output, "%sldc 1.0\nfsub\nfstore %d\n", $1.msg, address);
 				free($1.msg);
 				/*char *str = dynamic_strcat(2, $1.msg, strdup("DEC\n")); 
 				printf("%s", str);
@@ -554,7 +555,7 @@ Condition
 				free(error_str);
 				free(type);
 			}
-			else printf("%s", $1.msg); 
+			else fprintf(output, "%s", $1.msg); 
 			free($1.msg); 
 		}
 ;
@@ -575,15 +576,15 @@ PrintStmt
 			free($3.msg);
 			free(type);*/
 			ident_to_instruction($3.msg, 'l');
-			printf("%s", $3.msg);
+			fprintf(output, "%s", $3.msg);
 			if($3.exprType == INT)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(I)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(I)V\n");
 			else if($3.exprType == FLOAT)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(F)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(F)V\n");
 			else if($3.exprType == STRING)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
 			else if($3.exprType == BOOL)	// not handled yet
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
 			free($3.msg);
 		}
 	| PRINTLN '(' Expression ')'
@@ -592,15 +593,15 @@ PrintStmt
 			free($3.msg);
 			free(type);*/
 			ident_to_instruction($3.msg, 'l');
-			printf("%s", $3.msg);
+			fprintf(output, "%s", $3.msg);
 			if($3.exprType == INT)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(I)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(I)V\n");
 			else if($3.exprType == FLOAT)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(F)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(F)V\n");
 			else if($3.exprType == STRING)
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
 			else if($3.exprType == BOOL)	// not handled yet
-				printf("getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
 			free($3.msg);
 		}
 ;
@@ -615,17 +616,19 @@ int main(int argc, char *argv[])
     } else {
         yyin = stdin;
     }
+	output = fopen("hw3.j", "w");
 	symbol_table[0] = NULL;
 
-	printf(".source hw3.j\n.class public Main\n.super java/lang/Object\n.method public static main([Ljava/lang/String;)V\n.limit stack 100\n.limit locals 100\n");
+	fprintf(output, ".source hw3.j\n.class public Main\n.super java/lang/Object\n.method public static main([Ljava/lang/String;)V\n.limit stack 100\n.limit locals 100\n");
 
     yylineno = 0;
     yyparse();
 
 	dump_symbol();
 	printf("Total lines: %d\n", yylineno);
+	fprintf(output, "return\n.end method\n");
     fclose(yyin);
-	printf("return\n.end method\n");
+	fclose(output);
     if (HAS_ERROR) {
         remove("hw3.j");
     }
@@ -661,15 +664,15 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	strcpy(ptr->element_type, element_type);
 	ptr->next = NULL;
 	if(strcmp(type, "int32") == 0)
-    	printf("istore %d\n", ptr->address);
+    	fprintf(output, "istore %d\n", ptr->address);
 	else if(strcmp(type, "float32") == 0)
-    	printf("fstore %d\n", ptr->address);
+    	fprintf(output, "fstore %d\n", ptr->address);
 	else if(strcmp(type, "bool") == 0)
-    	printf("istore %d\n", ptr->address);	// not sure
+    	fprintf(output, "istore %d\n", ptr->address);	// not sure
 	else if(strcmp(type, "string") == 0)
-    	printf("astore %d\n", ptr->address);
+    	fprintf(output, "astore %d\n", ptr->address);
 	else if(strcmp(type, "array") == 0)
-    	printf("not handle %d\n", ptr->address);
+    	fprintf(output, "not handle %d\n", ptr->address);
 	//printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 	free(type);
 	free(element_type);
