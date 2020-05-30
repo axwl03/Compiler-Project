@@ -8,6 +8,7 @@
     extern int yylex();
     extern FILE *yyin;
 	FILE *output;
+	bool HAS_ERROR = false;
 
     char *yyerror (char const *s)
     {
@@ -17,6 +18,7 @@
 			exit(1);
 		}
         sprintf(str, "error:%d: %s\n", yylineno, s);
+		HAS_ERROR = true;
 		return str;
     }
 
@@ -52,7 +54,10 @@
 	/* error function */
 	char *type_mismatched(char *op, int type1, int type2);
 	char *op_type_not_defined(char *op, int type);
-	bool HAS_ERROR = false;
+
+	/* get branch tag */
+	char *get_branch_label();
+	int label_count = 0;
 %}
 
 %error-verbose
@@ -142,11 +147,11 @@ Expression
 					type = INT;
 				else if($1.exprType == STRING || $3.exprType == STRING)
 					type = STRING;
-				char *error_str = op_type_not_defined("LOR", type);
-				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("LOR\n")); 
+				char *error_str = op_type_not_defined("ior", type);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("ior\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LOR\n")); 
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("ior\n")); 
 			$$.isVar = false;
 		}
 	| Expression LAND Expression 
@@ -159,11 +164,11 @@ Expression
 					type = INT;
 				else if($1.exprType == STRING || $3.exprType == STRING)
 					type = STRING;
-				char *error_str = op_type_not_defined("LAND", type);
-				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("LAND\n")); 
+				char *error_str = op_type_not_defined("iand", type);
+				$$.msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), strdup("iand\n")); 
 				free(error_str);
 			}
-			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LAND\n")); 
+			else $$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("iand\n")); 
 			$$.isVar = false;
 		}
 	| Expression EQL Expression 
@@ -187,7 +192,16 @@ Expression
 			$$.isVar = false;
 		}
 	| Expression '>' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GTR\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\nifgt %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\nifgt %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
 		}
@@ -278,7 +292,19 @@ Expression
 UnaryExpr
 	: PrimaryExpr { $$ = $1; } 
 	| unary_op UnaryExpr 
-		{	$$.msg = dynamic_strcat(2, $2.msg, $1.msg); 
+		{	if(strcmp($1.msg, "POS\n") == 0)
+				$$.msg = $2.msg;
+			else if(strcmp($1.msg, "NEG\n") == 0){
+				free($1.msg);
+				if($2.exprType == INT)
+					$$.msg = dynamic_strcat(2, $2.msg, strdup("ineg\n"));
+				else if($2.exprType == FLOAT)
+					$$.msg = dynamic_strcat(2, $2.msg, strdup("fneg\n"));
+			}
+			else if(strcmp($1.msg, "NOT\n") == 0){
+				free($1.msg);
+				$$.msg = dynamic_strcat(2, $2.msg, strdup("iconst_1\nixor\n")); 
+			}
 			$$.exprType = $2.exprType; 
 			$$.isVar = false; 
 		}
@@ -404,13 +430,13 @@ DeclarationStmt
 			// if not declared
 			if(!variable){
 				if($3.type == INT)
-					fprintf(output, "ldc 0\n");
+					fprintf(output, "iconst_0\n");
 				else if($3.type == FLOAT)
-					fprintf(output, "ldc 0\n");
+					fprintf(output, "fconst_0\n");
 				else if($3.type == STRING)
-					fprintf(output, "ldc \"\"\n");
-				else if($3.type == BOOL)		// not handled yet
-					fprintf(output, "ldc \"\"\n");
+					fprintf(output, "aconst_null\n");
+				else if($3.type == BOOL)
+					fprintf(output, "iconst_0\n");
 				else if($3.type == ARRAY)
 					fprintf(output, "ARRAY not handled yet\n");
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
@@ -583,8 +609,11 @@ PrintStmt
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(F)V\n");
 			else if($3.exprType == STRING)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
-			else if($3.exprType == BOOL)	// not handled yet
+			else if($3.exprType == BOOL){
+				char *l0 = get_branch_label(), *l1 = get_branch_label();
+				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+			}
 			free($3.msg);
 		}
 	| PRINTLN '(' Expression ')'
@@ -600,8 +629,11 @@ PrintStmt
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(F)V\n");
 			else if($3.exprType == STRING)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
-			else if($3.exprType == BOOL)	// not handled yet
+			else if($3.exprType == BOOL){
+				char *l0 = get_branch_label(), *l1 = get_branch_label();
+				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+			}
 			free($3.msg);
 		}
 ;
@@ -793,7 +825,7 @@ char *type_toString(int type){
 	else return NULL;
 }
 
-void ident_to_instruction(char *str, char instruction_type){
+void ident_to_instruction(char *str, char instruction_type){	// instruction_type can be either l or s
 	char *result = strstr(str, "IDENT"), *temp;
 	int len;
 	while(result != NULL){
@@ -852,5 +884,15 @@ char *op_type_not_defined(char *op, int type){
 	}
 	sprintf(str, "invalid operation: (operator %s not defined on %s)", op, s_type);
 	free(s_type);
+	return str;
+}
+
+char *get_branch_label(){
+	char *str = malloc(sizeof(char)*50);
+	if(!str){
+		printf("malloc failed\n");
+		exit(1);
+	}
+	sprintf(str, "L_cmp_%d", label_count++);
 	return str;
 }
