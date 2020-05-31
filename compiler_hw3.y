@@ -80,6 +80,10 @@
 		int exprType;
 		bool isVar;
 	} output;
+	struct {
+		char *l0;
+		char *l1;
+	} if_label;
 }
 
 /* Token without return */
@@ -110,6 +114,7 @@
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
 %type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op
+%type <if_label> IfPrefix
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -173,9 +178,20 @@ Expression
 			$$.isVar = false;
 		}
 	| Expression EQL Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("EQL\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\nifeq %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\nifeq %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression NEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); 
@@ -205,6 +221,8 @@ Expression
 			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression GEQ Expression 
 		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); 
@@ -648,9 +666,25 @@ StatementList
 ;
 
 IfStmt
-	: IF Condition Block
-	| IF Condition Block ELSE IfStmt
-	| IF Condition Block ELSE Block
+	: IfPrefix Block 
+		{	fprintf(output, "%s:\n", $1.l0);
+			free($1.l0);
+			free($1.l1);
+		}
+	| IfPrefix Block { fprintf(output, "goto %s\n%s:\n", $1.l1, $1.l0); } ELSE ElsePrefix { fprintf(output, "%s:\n", $1.l1); free($1.l0); free($1.l1); }
+;
+
+IfPrefix
+	: IF Condition 
+		{	$$.l0 = get_branch_label();
+			$$.l1 = get_branch_label();
+			fprintf(output, "ifeq %s\n", $$.l0);
+		}
+;
+
+ElsePrefix
+	: IfStmt
+	| Block
 ;
 
 Condition
@@ -665,7 +699,10 @@ Condition
 				free(error_str);
 				free(type);
 			}
-			else fprintf(output, "%s", $1.msg); 
+			else {
+				ident_to_instruction($1.msg, 'l');
+				fprintf(output, "%s", $1.msg);
+			}
 			free($1.msg); 
 		}
 ;
@@ -697,6 +734,8 @@ PrintStmt
 				char *l0 = get_branch_label(), *l1 = get_branch_label();
 				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+				free(l0);
+				free(l1);
 			}
 			free($3.msg);
 		}
@@ -717,6 +756,8 @@ PrintStmt
 				char *l0 = get_branch_label(), *l1 = get_branch_label();
 				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+				free(l0);
+				free(l1);
 			}
 			free($3.msg);
 		}
