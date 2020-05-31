@@ -204,9 +204,20 @@ Expression
 			$$.isVar = false;
 		}
 	| Expression LEQ Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LEQ\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\nifle %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\nifle %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression '>' Expression 
 		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
@@ -789,9 +800,9 @@ int main(int argc, char *argv[])
 	fprintf(output, "return\n.end method\n");
     fclose(yyin);
 	fclose(output);
-    /*if (HAS_ERROR) {
+    if (HAS_ERROR) {
         remove("hw3.j");
-    }*/
+    }
     return 0;
 }
 
