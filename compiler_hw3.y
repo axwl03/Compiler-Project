@@ -447,7 +447,7 @@ DeclarationStmt
 				else if($3.type == FLOAT)
 					fprintf(output, "fconst_0\n");
 				else if($3.type == STRING)
-					fprintf(output, "aconst_null\n");
+					fprintf(output, "ldc \"\"\n");
 				else if($3.type == BOOL)
 					fprintf(output, "iconst_0\n");
 				else if($3.type == ARRAY && $3.element_type == INT)
@@ -521,7 +521,6 @@ AssignmentStmt
 			else{
 				ident_to_instruction($3.msg, 'l');
 				if(strcmp($2.msg, "ASSIGN") == 0){
-					free($2.msg);
 					ident_to_instruction($1.msg, 's');
 					if($1.exprType == ARRAY_I)
 						fprintf(output, "%s%s%s", $1.msg, $3.msg, "iastore\n");
@@ -531,18 +530,64 @@ AssignmentStmt
 						fprintf(output, "%s%s%s", $1.msg, $3.msg, "bastore\n");
 					else if($1.exprType == ARRAY_S)
 						fprintf(output, "%s%s%s", $1.msg, $3.msg, "aastore\n");
-					else {
+					else
 						fprintf(output, "%s%s\n", $3.msg, $1.msg);	
-					}
-					free($1.msg);
-					free($3.msg);
 				}
 				else{
-					fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
+					int address = ident_to_instruction($1.msg, 's');
+					if(strcmp($2.msg, "ADD_ASSIGN") == 0){
+						if($1.exprType == ARRAY_I)
+							fprintf(output, "%s%siaload\n%siadd\niastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == ARRAY_F)
+							fprintf(output, "%s%sfaload\n%sfadd\nfastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == INT)
+							fprintf(output, "iload %d\n%siadd\n%s", address, $3.msg, $1.msg);	
+						else if($1.exprType == FLOAT)
+							fprintf(output, "fload %d\n%sfadd\n%s", address, $3.msg, $1.msg);	
+					}
+					else if(strcmp($2.msg, "SUB_ASSIGN") == 0){
+						if($1.exprType == ARRAY_I)
+							fprintf(output, "%s%siaload\n%sisub\niastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == ARRAY_F)
+							fprintf(output, "%s%sfaload\n%sfsub\nfastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == INT)
+							fprintf(output, "iload %d\n%sisub\n%s", address, $3.msg, $1.msg);	
+						else if($1.exprType == FLOAT)
+							fprintf(output, "fload %d\n%sfsub\n%s", address, $3.msg, $1.msg);	
+					}
+					else if(strcmp($2.msg, "MUL_ASSIGN") == 0){
+						if($1.exprType == ARRAY_I)
+							fprintf(output, "%s%siaload\n%simul\niastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == ARRAY_F)
+							fprintf(output, "%s%sfaload\n%sfmul\nfastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == INT)
+							fprintf(output, "iload %d\n%simul\n%s", address, $3.msg, $1.msg);	
+						else if($1.exprType == FLOAT)
+							fprintf(output, "fload %d\n%sfmul\n%s", address, $3.msg, $1.msg);	
+					}
+					else if(strcmp($2.msg, "QUO_ASSIGN") == 0){
+						if($1.exprType == ARRAY_I)
+							fprintf(output, "%s%siaload\n%sidiv\niastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == ARRAY_F)
+							fprintf(output, "%s%sfaload\n%sfdiv\nfastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == INT)
+							fprintf(output, "iload %d\n%sidiv\n%s", address, $3.msg, $1.msg);	
+						else if($1.exprType == FLOAT)
+							fprintf(output, "fload %d\n%sfdiv\n%s", address, $3.msg, $1.msg);	
+					}
+					if(strcmp($2.msg, "REM_ASSIGN") == 0){
+						if($1.exprType == ARRAY_I)
+							fprintf(output, "%s%siaload\n%sirem\niastore %d\n", $1.msg, $1.msg, $3.msg, address);
+						else if($1.exprType == INT)
+							fprintf(output, "iload %d\n%sirem\n%s", address, $3.msg, $1.msg);	
+					}
+				}
+				//else{
+				//	fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
 					free($1.msg);
 					free($3.msg);
 					free($2.msg);
-				}
+				//}
 			}
 		}
 ;
