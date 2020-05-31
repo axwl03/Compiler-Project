@@ -113,8 +113,8 @@
 
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
-%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op
-%type <branch_label> IfPrefix ForRemain
+%type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op Condition
+%type <branch_label> IfPrefix
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -194,14 +194,36 @@ Expression
 			free(l1);
 		}
 	| Expression NEQ Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("NEQ\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\nifne %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\nifne %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression '<' Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("LSS\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\niflt %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\niflt %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression LEQ Expression 
 		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
@@ -236,9 +258,20 @@ Expression
 			free(l1);
 		}
 	| Expression GEQ Expression 
-		{	$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("GEQ\n")); 
+		{	char *l0 = get_branch_label(), *l1 = get_branch_label(), *str = malloc(sizeof(char)*100);
+			if(!str){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			if($1.exprType == INT)
+				sprintf(str, "isub\nifge %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			else if($1.exprType == FLOAT)
+				sprintf(str, "fcmpg\nifge %s\niconst_0\ngoto %s\n%s:\niconst_1\n%s:\n", l0, l1, l0, l1);
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, str); 
 			$$.exprType = BOOL; 
 			$$.isVar = false;
+			free(l0);
+			free(l1);
 		}
 	| Expression '+' Expression 
 		{	$$.exprType = evaluate_type($1.exprType, $3.exprType);
@@ -610,12 +643,9 @@ AssignmentStmt
 							fprintf(output, "iload %d\n%sirem\n%s", address, $3.msg, $1.msg);	
 					}
 				}
-				//else{
-				//	fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
-					free($1.msg);
-					free($3.msg);
-					free($2.msg);
-				//}
+				free($1.msg);
+				free($3.msg);
+				free($2.msg);
 			}
 		}
 ;
@@ -644,9 +674,6 @@ IncDecStmt
 				else if(type == 'f')
 					fprintf(output, "%sldc 1.0\nfadd\nfstore %d\n", $1.msg, address);
 				free($1.msg);
-				/*char *str = dynamic_strcat(2, $1.msg, strdup("INC\n")); 
-				printf("%s", str);
-				free(str);*/
 			}
 		}
 	| Expression DEC
@@ -659,9 +686,6 @@ IncDecStmt
 				else if(type == 'f')
 					fprintf(output, "%sldc 1.0\nfsub\nfstore %d\n", $1.msg, address);
 				free($1.msg);
-				/*char *str = dynamic_strcat(2, $1.msg, strdup("DEC\n")); 
-				printf("%s", str);
-				free(str);*/
 			}
 		}
 ;
@@ -686,7 +710,9 @@ IfStmt
 
 IfPrefix
 	: IF Condition 
-		{	$$.l0 = get_branch_label();
+		{	fprintf(output, "%s", $2.msg);
+			free($2.msg);
+			$$.l0 = get_branch_label();
 			$$.l1 = get_branch_label();
 			fprintf(output, "ifeq %s\n", $$.l0);
 		}
@@ -711,31 +737,23 @@ Condition
 			}
 			else {
 				ident_to_instruction($1.msg, 'l');
-				fprintf(output, "%s", $1.msg);
+				$$.msg = $1.msg;
 			}
-			free($1.msg); 
 		}
 ;
 
 ForStmt
-	: FOR { $<branch_label>$.l0 = get_branch_label(); fprintf(output, "%s:\n", $<branch_label>$.l0); } ForRemain { fprintf(output, "goto %s\n%s:\n", $<branch_label>2.l0, $3.l1); free($<branch_label>2.l0); free($3.l1); }
-;
-
-ForRemain
-	: Condition { $<branch_label>$.l1 = get_branch_label(); fprintf(output, "ifeq %s\n", $<branch_label>$.l1); } Block { $$.l1 = $<branch_label>2.l1; } 
-	| ForClause Block {}
+	: FOR Condition { $<branch_label>$.l0 = get_branch_label(); $<branch_label>$.l1 = get_branch_label(); fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $2.msg, $<branch_label>$.l1); } Block { fprintf(output, "goto %s\n%s:\n", $<branch_label>3.l0, $<branch_label>3.l1); free($<branch_label>3.l0); free($<branch_label>3.l1); free($2.msg); }
+	| FOR ForClause Block
 ;
 
 ForClause
-	: SimpleStmt ';' Condition ';' SimpleStmt
+	: SimpleStmt ';' Condition { $<branch_label>$.l0 = get_branch_label(); $<branch_label>$.l1 = get_branch_label(); fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $3.msg, $<branch_label>$.l1); } ';' SimpleStmt
 ;
 
 PrintStmt
 	: PRINT '(' Expression ')' 
-		{	/*char *type = type_toString($3.exprType);
-			printf("%sPRINT %s\n", $3.msg, type);
-			free($3.msg);
-			free(type);*/
+		{
 			ident_to_instruction($3.msg, 'l');
 			fprintf(output, "%s", $3.msg);
 			if($3.exprType == INT || $3.exprType == ARRAY_I)
@@ -754,10 +772,7 @@ PrintStmt
 			free($3.msg);
 		}
 	| PRINTLN '(' Expression ')'
-		{	/*char *type = type_toString($3.exprType);
-			printf("%sPRINTLN %s\n", $3.msg, type);
-			free($3.msg);
-			free(type);*/
+		{
 			ident_to_instruction($3.msg, 'l');
 			fprintf(output, "%s", $3.msg);
 			if($3.exprType == INT || $3.exprType == ARRAY_I)
@@ -844,7 +859,6 @@ static void insert_symbol(char *id, char *type, char *element_type) {
     	fprintf(output, "astore %d\n", ptr->address);
 	else if(strcmp(type, "array") == 0)
     	fprintf(output, "astore %d\n", ptr->address);
-	//printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 	free(type);
 	free(element_type);
 }
@@ -980,7 +994,7 @@ int ident_to_instruction(char *str, char instruction_type){	// instruction_type 
 			else if(strcmp(type, "float32") == 0)
 				sprintf(result, "%s %d\n%n%s", "fload", address, &len, temp);
 			else if(strcmp(type, "bool") == 0)
-				sprintf(result, "%s %d\n%n%s", "iload", address, &len, temp);	// not sure
+				sprintf(result, "%s %d\n%n%s", "iload", address, &len, temp);
 			else if(strcmp(type, "string") == 0)
 				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);
 			else if(strcmp(type, "array") == 0){
@@ -994,7 +1008,7 @@ int ident_to_instruction(char *str, char instruction_type){	// instruction_type 
 					sprintf(aster_str, "baload\n%s", remain);
 				else if(element_type == STRING)
 					sprintf(aster_str, "aaload\n%s", remain);
-				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);	// not sure
+				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);
 			}
 		}
 		else if(instruction_type == 's'){
@@ -1003,13 +1017,13 @@ int ident_to_instruction(char *str, char instruction_type){	// instruction_type 
 			else if(strcmp(type, "float32") == 0)
 				sprintf(result, "%s %d\n%n%s", "fstore", address, &len, temp);
 			else if(strcmp(type, "bool") == 0)
-				sprintf(result, "%s %d\n%n%s", "istore", address, &len, temp);	// not sure
+				sprintf(result, "%s %d\n%n%s", "istore", address, &len, temp);
 			else if(strcmp(type, "string") == 0)
 				sprintf(result, "%s %d\n%n%s", "astore", address, &len, temp);
 			else if(strcmp(type, "array") == 0){
 				char *aster_str = strstr(temp, "**********"), *remain = strdup(aster_str + 10);
 				sprintf(aster_str, "%s", remain);
-				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);	// not sure
+				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);
 			}
 		}
 		else if(instruction_type == 'a'){	// do no make changes, only return array variable address
