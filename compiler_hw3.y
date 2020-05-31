@@ -49,7 +49,7 @@
 	char *type_toString(int type);
 
 	/* change IDENT... string to load or store instruction */
-	void ident_to_instruction(char *str, char instruction_type);
+	int ident_to_instruction(char *str, char instruction_type);
 
 	/* error function */
 	char *type_mismatched(char *op, int type1, int type2);
@@ -84,12 +84,13 @@
 
 /* Token without return */
 %token VAR
-%token INT FLOAT BOOL STRING ARRAY
+%token INT FLOAT BOOL STRING
 %token INC DEC
 %token '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN QUO_ASSIGN REM_ASSIGN
 %token '(' ')' '{' '}' '"'
 %token ';' ',' NEWLINE
 %token PRINT PRINTLN IF ELSE FOR
+%token ARRAY ARRAY_I ARRAY_F ARRAY_B ARRAY_S
 
 %left LOR
 %left LAND
@@ -338,11 +339,9 @@ Operand
 					printf("malloc failed\n");
 					exit(1);
 				}
+				$$.exprType = type_atoi(variable->type);
 				sprintf(str, "IDENT (name=%s, address=%d)\n", variable->name, variable->address);
 				$$.msg = str;
-				$$.exprType = type_atoi(variable->type);
-				if($$.exprType == -1)
-					$$.exprType = type_atoi(variable->element_type);
 			}
 			$$.isVar = true;
 		} 
@@ -381,7 +380,21 @@ Literal
 ;
 
 IndexExpr
-	: PrimaryExpr '[' Expression ']' { $$.msg = dynamic_strcat(2, $1.msg, $3.msg); $$.exprType = $1.exprType; $$.isVar = $1.isVar; }
+	: PrimaryExpr '[' Expression ']' 
+		{	int address = ident_to_instruction($1.msg, 'a'), temp;
+			$$.msg = dynamic_strcat(3, $1.msg, $3.msg, strdup("**********"));
+			entry *variable = get_symbol(address);
+			temp = type_atoi(variable->element_type);
+			if(temp == INT)
+				$$.exprType = ARRAY_I;
+			else if(temp == FLOAT)
+				$$.exprType = ARRAY_F;
+			else if(temp == BOOL)
+				$$.exprType = ARRAY_B;
+			else if(temp == STRING)
+				$$.exprType = ARRAY_S;
+			$$.isVar = $1.isVar; 
+		}
 ;
 
 ConversionExpr
@@ -437,8 +450,14 @@ DeclarationStmt
 					fprintf(output, "aconst_null\n");
 				else if($3.type == BOOL)
 					fprintf(output, "iconst_0\n");
-				else if($3.type == ARRAY)
-					fprintf(output, "ARRAY not handled yet\n");
+				else if($3.type == ARRAY && $3.element_type == INT)
+					fprintf(output, "newarray int\n");
+				else if($3.type == ARRAY && $3.element_type == FLOAT)
+					fprintf(output, "newarray float\n");
+				else if($3.type == ARRAY && $3.element_type == BOOL)
+					fprintf(output, "newarray boolean\n");
+				else if($3.type == ARRAY && $3.element_type == STRING)
+					fprintf(output, "anewarray Ljava/lang/String;\n");
 				insert_symbol($2, type_toString($3.type), type_toString($3.element_type)); 
 			}
 			else{
@@ -476,7 +495,7 @@ AssignmentStmt
 	: Expression assign_op Expression 
 		{	int type = evaluate_type($1.exprType, $3.exprType);
 			if($1.exprType == -1){	// $1 undefined
-				printf("%s%s%s\n", $1.msg, $3.msg, $2.msg); 
+				fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
 				free($1.msg);
 				free($3.msg);
 				free($2.msg);
@@ -486,7 +505,7 @@ AssignmentStmt
 				sprintf(str, "cannot assign to %s", type);
 				free(type);
 				error_str = yyerror(str);
-				printf("%s%s%s%s\n", $1.msg, $3.msg, error_str, $2.msg);
+				fprintf(output, "%s%s%s%s\n", $1.msg, $3.msg, error_str, $2.msg);
 				free(error_str);
 				free($1.msg);
 				free($3.msg);
@@ -495,15 +514,35 @@ AssignmentStmt
 			else if(type == -1){	// type mismatched
 				char *msg, *error_str = type_mismatched($2.msg, $1.exprType, $3.exprType);
 				msg = dynamic_strcat(4, $1.msg, $3.msg, yyerror(error_str), $2.msg);
-				printf("%s\n", msg); 
+				fprintf(output, "%s\n", msg); 
 				free(error_str);
 				free(msg);
 			}
 			else{
-				fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
-				free($1.msg);
-				free($3.msg);
-				free($2.msg);
+				ident_to_instruction($3.msg, 'l');
+				if(strcmp($2.msg, "ASSIGN") == 0){
+					free($2.msg);
+					ident_to_instruction($1.msg, 's');
+					if($1.exprType == ARRAY_I)
+						fprintf(output, "%s%s%s", $1.msg, $3.msg, "iastore\n");
+					else if($1.exprType == ARRAY_F)
+						fprintf(output, "%s%s%s", $1.msg, $3.msg, "fastore\n");
+					else if($1.exprType == ARRAY_B)
+						fprintf(output, "%s%s%s", $1.msg, $3.msg, "bastore\n");
+					else if($1.exprType == ARRAY_S)
+						fprintf(output, "%s%s%s", $1.msg, $3.msg, "aastore\n");
+					else {
+						fprintf(output, "%s%s\n", $3.msg, $1.msg);	
+					}
+					free($1.msg);
+					free($3.msg);
+				}
+				else{
+					fprintf(output, "%s%s%s\n", $1.msg, $3.msg, $2.msg); 
+					free($1.msg);
+					free($3.msg);
+					free($2.msg);
+				}
 			}
 		}
 ;
@@ -603,13 +642,13 @@ PrintStmt
 			free(type);*/
 			ident_to_instruction($3.msg, 'l');
 			fprintf(output, "%s", $3.msg);
-			if($3.exprType == INT)
+			if($3.exprType == INT || $3.exprType == ARRAY_I)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(I)V\n");
-			else if($3.exprType == FLOAT)
+			else if($3.exprType == FLOAT || $3.exprType == ARRAY_F)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(F)V\n");
-			else if($3.exprType == STRING)
+			else if($3.exprType == STRING || $3.exprType == ARRAY_S)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
-			else if($3.exprType == BOOL){
+			else if($3.exprType == BOOL || $3.exprType == ARRAY_B){
 				char *l0 = get_branch_label(), *l1 = get_branch_label();
 				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
@@ -623,13 +662,13 @@ PrintStmt
 			free(type);*/
 			ident_to_instruction($3.msg, 'l');
 			fprintf(output, "%s", $3.msg);
-			if($3.exprType == INT)
+			if($3.exprType == INT || $3.exprType == ARRAY_I)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(I)V\n");
-			else if($3.exprType == FLOAT)
+			else if($3.exprType == FLOAT || $3.exprType == ARRAY_F)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(F)V\n");
-			else if($3.exprType == STRING)
+			else if($3.exprType == STRING || $3.exprType == ARRAY_S)
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
-			else if($3.exprType == BOOL){
+			else if($3.exprType == BOOL || $3.exprType == ARRAY_B){
 				char *l0 = get_branch_label(), *l1 = get_branch_label();
 				fprintf(output, "ifne %s\nldc \"false\"\ngoto %s\n%s:\nldc \"true\"\n%s:\n", l0, l1, l0, l1);
 				fprintf(output, "getstatic java/lang/System/out Ljava/io/PrintStream;\nswap\ninvokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
@@ -661,9 +700,9 @@ int main(int argc, char *argv[])
 	fprintf(output, "return\n.end method\n");
     fclose(yyin);
 	fclose(output);
-    if (HAS_ERROR) {
+    /*if (HAS_ERROR) {
         remove("hw3.j");
-    }
+    }*/
     return 0;
 }
 
@@ -700,11 +739,11 @@ static void insert_symbol(char *id, char *type, char *element_type) {
 	else if(strcmp(type, "float32") == 0)
     	fprintf(output, "fstore %d\n", ptr->address);
 	else if(strcmp(type, "bool") == 0)
-    	fprintf(output, "istore %d\n", ptr->address);	// not sure
+    	fprintf(output, "istore %d\n", ptr->address);
 	else if(strcmp(type, "string") == 0)
     	fprintf(output, "astore %d\n", ptr->address);
 	else if(strcmp(type, "array") == 0)
-    	fprintf(output, "not handle %d\n", ptr->address);
+    	fprintf(output, "astore %d\n", ptr->address);
 	//printf("> Insert {%s} into symbol table (scope level: %d)\n", id, current_scope);
 	free(type);
 	free(element_type);
@@ -786,13 +825,13 @@ char *dynamic_strcat(int n, ...){
 }
 
 int evaluate_type(int type1, int type2){
-	if(type1 == FLOAT && type2 == FLOAT)
+	if((type1 == FLOAT || type1 == ARRAY_F) && (type2 == FLOAT || type2 == ARRAY_F))
 		return FLOAT;
-	else if(type1 == INT && type2 == INT)
+	else if((type1 == INT || type1 == ARRAY_I) && (type2 == INT || type2 == ARRAY_I))
 		return INT;
-	else if(type1 == BOOL && type2 == BOOL)
+	else if((type1 == BOOL || type1 == ARRAY_B) && (type2 == BOOL || type2 == ARRAY_B))
 		return BOOL;
-	else if(type1 == STRING && type2 == STRING)
+	else if((type1 == STRING || type1 == ARRAY_S) && (type2 == STRING || type2 == ARRAY_S))
 		return STRING;
 	else return -1;
 }
@@ -806,7 +845,7 @@ int type_atoi(char *type){
 		return BOOL;
 	else if(strcmp(type, "string") == 0)
 		return STRING;
-	else return -1;		// ARRAY
+	else return ARRAY;
 }
 
 char *type_toString(int type){
@@ -825,12 +864,11 @@ char *type_toString(int type){
 	else return NULL;
 }
 
-void ident_to_instruction(char *str, char instruction_type){	// instruction_type can be either l or s
+int ident_to_instruction(char *str, char instruction_type){	// instruction_type can be either l, s or a
 	char *result = strstr(str, "IDENT"), *temp;
-	int len;
+	int len, address;
 	while(result != NULL){
 		char name[100];
-		int address;
 		sscanf(result, "IDENT (name=%[^,], address=%d)\n%n", name, &address, &len);
 		temp = result + len;	// point to the remaining string
 		temp = strdup(temp);
@@ -845,7 +883,19 @@ void ident_to_instruction(char *str, char instruction_type){	// instruction_type
 				sprintf(result, "%s %d\n%n%s", "iload", address, &len, temp);	// not sure
 			else if(strcmp(type, "string") == 0)
 				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);
-			// array not handled
+			else if(strcmp(type, "array") == 0){
+				char *aster_str = strstr(temp, "**********"), *remain = strdup(aster_str + 10);
+				int element_type = type_atoi(ptr->element_type);
+				if(element_type == INT)
+					sprintf(aster_str, "iaload\n%s", remain);
+				else if(element_type == FLOAT)
+					sprintf(aster_str, "faload\n%s", remain);
+				else if(element_type == BOOL)
+					sprintf(aster_str, "baload\n%s", remain);
+				else if(element_type == STRING)
+					sprintf(aster_str, "aaload\n%s", remain);
+				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);	// not sure
+			}
 		}
 		else if(instruction_type == 's'){
 			if(strcmp(type, "int32") == 0)
@@ -856,12 +906,22 @@ void ident_to_instruction(char *str, char instruction_type){	// instruction_type
 				sprintf(result, "%s %d\n%n%s", "istore", address, &len, temp);	// not sure
 			else if(strcmp(type, "string") == 0)
 				sprintf(result, "%s %d\n%n%s", "astore", address, &len, temp);
-			// array not handled
+			else if(strcmp(type, "array") == 0){
+				char *aster_str = strstr(temp, "**********"), *remain = strdup(aster_str + 10);
+				sprintf(aster_str, "%s", remain);
+				sprintf(result, "%s %d\n%n%s", "aload", address, &len, temp);	// not sure
+			}
+		}
+		else if(instruction_type == 'a'){	// do no make changes, only return array variable address
+			if(strcmp(type, "array") == 0)
+				return address;
+			else return -1;
 		}
 		free(temp);
 		result = result + len;
 		result = strstr(result, "IDENT");
 	}
+	return address;		// return last match variable's address
 }
 
 char *type_mismatched(char *op, int type1, int type2){
