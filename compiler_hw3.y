@@ -83,7 +83,7 @@
 	struct {
 		char *l0;
 		char *l1;
-	} if_label;
+	} branch_label;
 }
 
 /* Token without return */
@@ -114,7 +114,7 @@
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
 %type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op
-%type <if_label> IfPrefix
+%type <branch_label> IfPrefix ForRemain
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -417,8 +417,7 @@ IndexExpr
 
 ConversionExpr
 	: Type '(' Expression ')'
-		{
-			char str[10], s, d;
+		{	char str[10], s, d;
 			if($1.type == INT)
 				d = 'i';
 			else if($1.type == FLOAT)
@@ -708,8 +707,12 @@ Condition
 ;
 
 ForStmt
-	: FOR Condition Block
-	| FOR ForClause Block
+	: FOR { $<branch_label>$.l0 = get_branch_label(); fprintf(output, "%s:\n", $<branch_label>$.l0); } ForRemain { fprintf(output, "goto %s\n%s:\n", $<branch_label>2.l0, $3.l1); free($<branch_label>2.l0); free($3.l1); }
+;
+
+ForRemain
+	: Condition { $<branch_label>$.l1 = get_branch_label(); fprintf(output, "ifeq %s\n", $<branch_label>$.l1); } Block { $$.l1 = $<branch_label>2.l1; } 
+	| ForClause Block {}
 ;
 
 ForClause
