@@ -464,13 +464,13 @@ IndexExpr
 ConversionExpr
 	: Type '(' Expression ')'
 		{	char str[10], s, d;
-			if($1.type == INT)
+			if($1.type == INT || $1.type == ARRAY_I)
 				d = 'i';
-			else if($1.type == FLOAT)
+			else if($1.type == FLOAT || $1.type == ARRAY_F)
 				d = 'f';
-			if($3.exprType == INT)
+			if($3.exprType == INT || $3.exprType == ARRAY_I)
 				s = 'i';
-			else if($3.exprType == FLOAT)
+			else if($3.exprType == FLOAT || $3.exprType == ARRAY_F)
 				s = 'f';
 			sprintf(str, "%c2%c\n", s, d);
 			$$.exprType = $1.type;
