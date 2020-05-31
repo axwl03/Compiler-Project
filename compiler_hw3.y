@@ -402,14 +402,14 @@ ConversionExpr
 		{
 			char str[10], s, d;
 			if($1.type == INT)
-				d = 'I';
+				d = 'i';
 			else if($1.type == FLOAT)
-				d = 'F';
+				d = 'f';
 			if($3.exprType == INT)
-				s = 'I';
+				s = 'i';
 			else if($3.exprType == FLOAT)
-				s = 'F';
-			sprintf(str, "%c to %c\n", s, d);
+				s = 'f';
+			sprintf(str, "%c2%c\n", s, d);
 			$$.exprType = $1.type;
 			$$.msg = dynamic_strcat(2, $3.msg, strdup(str));
 			$$.isVar = false;
@@ -531,7 +531,7 @@ AssignmentStmt
 					else if($1.exprType == ARRAY_S)
 						fprintf(output, "%s%s%s", $1.msg, $3.msg, "aastore\n");
 					else
-						fprintf(output, "%s%s\n", $3.msg, $1.msg);	
+						fprintf(output, "%s%s", $3.msg, $1.msg);	
 				}
 				else{
 					int address = ident_to_instruction($1.msg, 's');
