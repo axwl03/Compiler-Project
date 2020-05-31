@@ -83,6 +83,8 @@
 	struct {
 		char *l0;
 		char *l1;
+		long int fpos;
+		char *fstr;
 	} branch_label;
 }
 
@@ -114,7 +116,7 @@
 /* Nonterminal with return, which need to sepcify type */
 %type <type> Type TypeName ArrayType
 %type <output> Expression UnaryExpr PrimaryExpr Operand Literal unary_op IndexExpr ConversionExpr assign_op Condition
-%type <branch_label> IfPrefix
+%type <branch_label> IfPrefix ForClause
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -743,12 +745,47 @@ Condition
 ;
 
 ForStmt
-	: FOR Condition { $<branch_label>$.l0 = get_branch_label(); $<branch_label>$.l1 = get_branch_label(); fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $2.msg, $<branch_label>$.l1); } Block { fprintf(output, "goto %s\n%s:\n", $<branch_label>3.l0, $<branch_label>3.l1); free($<branch_label>3.l0); free($<branch_label>3.l1); free($2.msg); }
-	| FOR ForClause Block
+	: FOR Condition 
+		{	$<branch_label>$.l0 = get_branch_label();
+			$<branch_label>$.l1 = get_branch_label();
+			fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $2.msg, $<branch_label>$.l1);
+		} Block 
+		{	fprintf(output, "goto %s\n%s:\n", $<branch_label>3.l0, $<branch_label>3.l1);
+			free($<branch_label>3.l0);
+			free($<branch_label>3.l1);
+			free($2.msg);
+		}
+	| FOR ForClause { fseek(output, $2.fpos, SEEK_SET); } Block
+		{	fprintf(output, "%sgoto %s\n%s:\n", $2.fstr, $2.l0, $2.l1);
+			free($2.l0);
+			free($2.l1);
+			free($2.fstr);
+		}
 ;
 
 ForClause
-	: SimpleStmt ';' Condition { $<branch_label>$.l0 = get_branch_label(); $<branch_label>$.l1 = get_branch_label(); fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $3.msg, $<branch_label>$.l1); } ';' SimpleStmt
+	: SimpleStmt ';' Condition 
+		{	$<branch_label>$.l0 = get_branch_label();
+			$<branch_label>$.l1 = get_branch_label();
+			fprintf(output, "%s:\n%sifeq %s\n", $<branch_label>$.l0, $3.msg, $<branch_label>$.l1);
+			$<branch_label>$.fpos = ftell(output);
+			free($3.msg);
+		} ';' SimpleStmt 
+		{	$$ = $<branch_label>4; 
+			fseek(output, $$.fpos, SEEK_SET);
+			$$.fstr = malloc(sizeof(char)*200);
+			if(!$$.fstr){
+				printf("malloc failed\n");
+				exit(1);
+			}
+			//fgets($$.fstr, sizeof($$.fstr), output);
+			char ch;
+			int i = 0;
+			while((ch = fgetc(output)) != EOF && i < 200){
+				$$.fstr[i] = ch;
+				i++;
+			} $$.fstr[i] = '\0';
+		}
 ;
 
 PrintStmt
@@ -802,7 +839,7 @@ int main(int argc, char *argv[])
     } else {
         yyin = stdin;
     }
-	output = fopen("hw3.j", "w");
+	output = fopen("hw3.j", "w+");
 	symbol_table[0] = NULL;
 
 	fprintf(output, ".source hw3.j\n.class public Main\n.super java/lang/Object\n.method public static main([Ljava/lang/String;)V\n.limit stack 100\n.limit locals 100\n");
